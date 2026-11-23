@@ -1,0 +1,38 @@
+{
+  "codex": [
+    {
+      "base-url": "https://openrouter.ai/api/v1",
+      "keys": [
+        {
+          "api-key": "sentinel-codex-key-0001",
+          "auth_index": "92eaf5b0e8033e00",
+          "models": [
+            { "name": "baidu/ernie-5.5-flash-preview:free" },
+            { "name": "particle-ai/particle-1:free" },
+            { "name": "nvidia/nemotron-3.5-super-vl:free" },
+            { "name": "openrouter/free" }
+          ]
+        }
+      ],
+      "name": "codex-1"
+    }
+  ],
+  "openai-compatibility": [
+    {
+      "base-url": "https://integrate.api.nvidia.com/v1",
+      "keys": [
+        {
+          "api-key": "sentinel-nvidia-key-0002",
+          "auth_index": "3607cf0883220ad0"
+        }
+      ],
+      "models": [
+        { "display-name": "minimaxai/minimax-m3.1-flash", "name": "minimaxai/minimax-m3.1-flash" },
+        { "display-name": "moonshotai/kimi-k3.1-pro", "name": "moonshotai/kimi-k3.1-pro" },
+        { "display-name": "stepfun-ai/step-5-preview", "name": "stepfun-ai/step-5-preview" },
+        { "display-name": "z-ai/glm-5.3-flash", "name": "z-ai/glm-5.3-flash" }
+      ],
+      "name": "NVIDIA"
+    }
+  ]
+}

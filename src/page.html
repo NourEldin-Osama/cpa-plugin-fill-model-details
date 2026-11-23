@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fill Model Details</title>
+<style>
+  :root {
+    --background: #ffffff;
+    --text: #1f2328;
+    --muted: #59636e;
+    --border: #d1d9e0;
+    --group: #f6f8fa;
+    --accent: #0969da;
+    --accent-text: #ffffff;
+    --ok-background: #dafbe1;
+    --ok-text: #116329;
+    --warning-background: #fff8c5;
+    --warning-text: #7d4e00;
+    --error-background: #ffebe9;
+    --error-text: #a40e26;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: #0d1117;
+      --text: #e6edf3;
+      --muted: #9198a1;
+      --border: #3d444d;
+      --group: #151b23;
+      --accent: #4493f8;
+      --accent-text: #0d1117;
+      --ok-background: #12261e;
+      --ok-text: #56d364;
+      --warning-background: #272115;
+      --warning-text: #e3b341;
+      --error-background: #2d1214;
+      --error-text: #ff7b72;
+    }
+  }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 6px; }
+  .muted { color: var(--muted); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+  .save-bar {
+    position: sticky; bottom: 0; padding: 10px 0;
+    background: var(--background); border-top: 1px solid var(--border);
+  }
+  button {
+    font: inherit; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--group); color: var(--text);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button:disabled { opacity: 0.55; cursor: default; }
+  input[type="password"] {
+    font: inherit; padding: 5px 8px; min-width: 260px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--background); color: var(--text);
+  }
+  #key-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  [hidden] { display: none !important; }
+  .message { padding: 8px 12px; border-radius: 6px; margin: 8px 0; }
+  .message.info { background: var(--group); }
+  .message.ok { background: var(--ok-background); color: var(--ok-text); }
+  .message.warning { background: var(--warning-background); color: var(--warning-text); }
+  .message.error { background: var(--error-background); color: var(--error-text); }
+  .warning-text { color: var(--warning-text); }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 760px; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  thead th { font-weight: 600; color: var(--muted); white-space: nowrap; }
+  th.group { background: var(--group); font-weight: 600; }
+  td.value { word-break: break-word; }
+  td.model { font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; }
+  .tag { display: inline-block; padding: 0 6px; border-radius: 10px; font-size: 12px; margin-left: 4px; }
+  .tag.same-host { background: var(--ok-background); color: var(--ok-text); }
+  .tag.check { background: var(--warning-background); color: var(--warning-text); }
+  .info { font-size: 12px; color: var(--muted); }
+  details { margin-top: 24px; }
+  details li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Fill Model Details</h1>
+  <p class="muted">Fills empty model fields from models.dev. Fields that already have a value are not changed. Nothing is saved until you press Save selected.</p>
+
+  <p id="key-status"></p>
+  <form id="key-form" hidden>
+    <label for="key-input">Management key</label>
+    <input id="key-input" type="password" autocomplete="off" spellcheck="false">
+    <button type="submit">Use this key</button>
+    <span class="muted">The key stays in this page only. It is not saved. After 5 wrong keys, CPA blocks your address for 30 minutes.</span>
+  </form>
+
+  <div class="toolbar">
+    <button id="preview-button" class="primary" type="button">Preview</button>
+    <button id="refresh-button" type="button">Download fresh models.dev data</button>
+  </div>
+  <p id="catalog-status" class="muted"></p>
+  <div id="message" class="message" role="status" hidden></div>
+
+  <div id="results"></div>
+
+  <div id="save-bar" class="toolbar save-bar" hidden>
+    <button id="save-button" class="primary" type="button">Save selected</button>
+    <button id="tick-all-button" type="button">Tick all</button>
+    <button id="untick-all-button" type="button">Untick all</button>
+    <span id="selected-count" class="muted"></span>
+  </div>
+</main>
+<script>
+"use strict";
+
+const pluginBase = location.pathname.split("/v0/resource/plugins/")[0]
+  + "/v0/management/fill-model-details/";
+const cpaPort = Number(location.port) || (location.protocol === "https:" ? 443 : 80);
+
+const FIELD_LABELS = {
+  "display-name": "Display name",
+  "max-context-length": "Context window",
+  "input-modalities": "Input types",
+  "thinking.levels": "Thinking levels",
+};
+const SECTION_LABELS = {
+  "openai-compatibility": "OpenAI compatible",
+  "codex": "Codex",
+};
+const MATCH_LABELS = {
+  same_host: "same host",
+  model_maker: "model maker, check first",
+  other_host: "other host, check first",
+};
+const THINKING_FIELD = "thinking.levels";
+
+let manualKey = "";
+let lastPreview = null;
+let isBusy = false;
+
+// The web panel may store values as "enc::v1::" or "enc::v2::": XOR with a
+// fixed mask, then base64. The desktop app stores plain JSON.
+function readStoredValue(name) {
+  let value = localStorage.getItem(name);
+  if (value === null) return null;
+  let maskSource = null;
+  if (value.startsWith("enc::v2::")) {
+    maskSource = "cli-proxy-api-webui::secure-storage|v2|" + location.host;
+  } else if (value.startsWith("enc::v1::")) {
+    maskSource = "cli-proxy-api-webui::secure-storage|" + location.host + "|" + navigator.userAgent;
+  }
+  if (maskSource) {
+    const mask = new TextEncoder().encode(maskSource);
+    const bytes = Uint8Array.from(atob(value.slice(9)), (character, index) =>
+      character.charCodeAt(0) ^ mask[index % mask.length]);
+    value = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  }
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+function storedManagementKey() {
+  try {
+    const auth = readStoredValue("cli-proxy-auth");
+    const key = auth && auth.state ? auth.state.managementKey : readStoredValue("managementKey");
+    return typeof key === "string" ? key.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function managementKey() {
+  return manualKey || storedManagementKey();
+}
+
+function element(tagName, options, children) {
+  const node = document.createElement(tagName);
+  if (options && options.className) node.className = options.className;
+  if (options && options.text !== undefined) node.textContent = options.text;
+  for (const child of children || []) {
+    if (child !== null && child !== undefined) node.append(child);
+  }
+  return node;
+}
+
+function formatValue(value) {
+  if (value === null || value === undefined) return "(empty)";
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "(empty)";
+  if (typeof value === "number") return value.toLocaleString("en-US");
+  if (typeof value === "string") return value.trim() === "" ? "(empty)" : value;
+  return JSON.stringify(value);
+}
+
+function showMessage(kind, text) {
+  const box = document.getElementById("message");
+  box.className = "message " + kind;
+  box.textContent = text;
+  box.hidden = !text;
+}
+
+function showKeyForm(statusText) {
+  document.getElementById("key-status").textContent = statusText;
+  document.getElementById("key-form").hidden = false;
+  document.getElementById("key-input").focus();
+}
+
+// A network error gets status 0. CPA also closes the connection, instead of
+// answering, when it refuses the key on a request that has a body.
+async function callRoute(method, route, body) {
+  const key = managementKey();
+  if (!key) {
+    const missingKey = new Error("no management key");
+    missingKey.status = 401;
+    throw missingKey;
+  }
+  const headers = { Authorization: "Bearer " + key };
+  const options = { method, cache: "no-store", headers };
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(body);
+  }
+  let response;
+  try {
+    response = await fetch(pluginBase + route, options);
+  } catch (networkError) {
+    const failure = new Error("could not reach CPA (" + networkError.message + ")");
+    failure.status = 0;
+    throw failure;
+  }
+  let data = null;
+  try { data = await response.json(); } catch { data = null; }
+  if (!response.ok) {
+    const serverText = data && (data.message || data.error);
+    const failure = new Error(serverText || "HTTP " + response.status);
+    failure.status = response.status;
+    throw failure;
+  }
+  return data;
+}
+
+function handleError(error, prefix) {
+  if (error.status === 401) {
+    showKeyForm("CPA did not accept the management key, or none was found. Type it below.");
+    showMessage("error", prefix + ": the management key is missing or wrong.");
+  } else if (error.status === 403) {
+    showMessage("error", prefix + ": CPA refused the request: " + error.message
+      + ". After 5 wrong keys, CPA blocks your address for 30 minutes.");
+  } else if (error.status === 409) {
+    showMessage("warning", "The config or the models.dev data changed after the preview. Nothing was saved. Press Preview to load the current state.");
+  } else {
+    showMessage("error", prefix + ": " + error.message);
+  }
+}
+
+function setBusy(busy) {
+  isBusy = busy;
+  for (const id of ["preview-button", "refresh-button", "save-button", "tick-all-button", "untick-all-button"]) {
+    document.getElementById(id).disabled = busy;
+  }
+}
+
+function choiceKey(change) {
+  return change.id + " " + JSON.stringify(change.proposed);
+}
+
+function currentChoices() {
+  const choices = new Map();
+  if (!lastPreview) return choices;
+  for (const checkbox of changeCheckboxes()) {
+    const change = lastPreview.changesById.get(checkbox.dataset.changeId);
+    if (change) choices.set(choiceKey(change), checkbox.checked);
+  }
+  return choices;
+}
+
+// After a save, rows the user left unticked stay unticked, so a second
+// press of Save selected does not save them by accident.
+function restoreChoices(choices) {
+  for (const checkbox of changeCheckboxes()) {
+    const change = lastPreview.changesById.get(checkbox.dataset.changeId);
+    const key = change ? choiceKey(change) : null;
+    if (key && choices.has(key)) checkbox.checked = choices.get(key);
+  }
+  updateSelectedCount();
+}
+
+async function runPreview(shouldRefresh, keepMessage, choices) {
+  if (isBusy) return;
+  setBusy(true);
+  if (!keepMessage) {
+    showMessage("info", shouldRefresh
+      ? "Downloading models.dev data (about 7 MB)..."
+      : "Loading the preview. The first run downloads about 7 MB from models.dev...");
+  }
+  try {
+    const route = "preview?cpa_port=" + cpaPort + (shouldRefresh ? "&refresh=1" : "");
+    const preview = await callRoute("GET", route);
+    renderPreview(preview);
+    if (choices) restoreChoices(choices);
+    if (!keepMessage) showMessage("", "");
+  } catch (error) {
+    handleError(error, "Could not load the preview");
+  } finally {
+    setBusy(false);
+  }
+}
+
+function renderCatalogStatus(catalog) {
+  const downloadedAt = new Date(catalog.downloaded_at_unix_seconds * 1000);
+  const parts = [
+    "models.dev data from " + downloadedAt.toLocaleString()
+      + " (" + catalog.model_count.toLocaleString("en-US") + " models).",
+  ];
+  if (catalog.download_error) {
+    parts.push("The download failed (" + catalog.download_error + "), so the saved copy is used.");
+  } else if (catalog.is_old) {
+    parts.push("This copy is more than a day old.");
+  }
+  if (catalog.save_error) {
+    parts.push("Could not keep a copy on disk: " + catalog.save_error + ".");
+  }
+  const status = document.getElementById("catalog-status");
+  status.textContent = parts.join(" ");
+  status.className = catalog.download_error || catalog.is_old ? "warning-text" : "muted";
+}
+
+function groupByEntry(models) {
+  const groups = new Map();
+  for (const model of models) {
+    const location = model.location;
+    const groupKey = location.section + "/" + location.entry_index;
+    if (!groups.has(groupKey)) {
+      const sectionLabel = SECTION_LABELS[location.section] || location.section;
+      const hostText = model.entry_host ? ", " + model.entry_host : "";
+      const entryName = model.entry_name || "entry " + (location.entry_index + 1);
+      groups.set(groupKey, {
+        title: entryName + " (" + sectionLabel + hostText + ")",
+        models: [],
+        keyIndexes: new Set(),
+      });
+    }
+    const group = groups.get(groupKey);
+    group.models.push(model);
+    group.keyIndexes.add(location.key_index);
+  }
+  return [...groups.values()];
+}
+
+function modelLabel(model, group) {
+  const keyIndex = model.location.key_index;
+  if (keyIndex !== null && group.keyIndexes.size > 1) {
+    return model.model_id + " (key " + (keyIndex + 1) + ")";
+  }
+  return model.model_id;
+}
+
+function sourceCell(model) {
+  const source = model.source;
+  const isSameHost = source.match_kind === "same_host";
+  const tag = element("span", {
+    className: "tag " + (isSameHost ? "same-host" : "check"),
+    text: MATCH_LABELS[source.match_kind] || source.match_kind,
+  });
+  const providerText = source.provider_name || source.provider_id;
+  const lines = [element("div", null, [providerText, tag])];
+  if (source.model_id.toLowerCase() !== model.model_id.toLowerCase()) {
+    lines.push(element("div", { className: "info", text: "as " + source.model_id }));
+  }
+  const facts = [];
+  if (source.has_tool_call === true) facts.push("Tools: yes");
+  if (source.has_tool_call === false) facts.push("Tools: no");
+  if (source.output_tokens) facts.push("Max output: " + source.output_tokens.toLocaleString("en-US"));
+  if (source.is_thinking_toggle_only) facts.push("Thinking: on or off only");
+  if (source.status) facts.push("Status: " + source.status);
+  if (source.model_type) facts.push("Type: " + source.model_type);
+  if (facts.length) lines.push(element("div", { className: "info", text: facts.join(". ") + "." }));
+  return element("td", null, lines);
+}
+
+function changeRow(model, change, group) {
+  const fieldLabel = FIELD_LABELS[change.field] || change.field;
+  const checkbox = element("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = change.is_selected_by_default;
+  checkbox.dataset.changeId = change.id;
+  checkbox.setAttribute("aria-label", "Save " + fieldLabel + " for " + model.model_id);
+  checkbox.addEventListener("change", updateSelectedCount);
+  return element("tr", null, [
+    element("td", null, [checkbox]),
+    element("td", { className: "model", text: modelLabel(model, group) }),
+    element("td", { text: fieldLabel }),
+    element("td", { className: "value muted", text: formatValue(change.current) }),
+    element("td", { className: "value", text: formatValue(change.proposed) }),
+    sourceCell(model),
+  ]);
+}
+
+function changeTable(groups, includeChange) {
+  const body = element("tbody");
+  let rowCount = 0;
+  for (const group of groups) {
+    const groupRows = [];
+    for (const model of group.models) {
+      for (const change of model.changes.filter(includeChange)) {
+        groupRows.push(changeRow(model, change, group));
+      }
+    }
+    if (groupRows.length === 0) continue;
+    const groupHeader = element("th", { className: "group", text: group.title });
+    groupHeader.colSpan = 6;
+    body.append(element("tr", null, [groupHeader]), ...groupRows);
+    rowCount += groupRows.length;
+  }
+  if (rowCount === 0) return null;
+  const headings = ["Save", "Model", "Field", "Now", "New", "Source"];
+  const head = element("thead", null, [
+    element("tr", null, headings.map((text) => element("th", { text }))),
+  ]);
+  return element("div", { className: "table-wrap" }, [element("table", null, [head, body])]);
+}
+
+function unchangedList(groups) {
+  const items = [];
+  for (const group of groups) {
+    for (const model of group.models) {
+      if (model.changes.length) continue;
+      const reason = model.source
+        ? "nothing empty that models.dev can fill"
+        : "not found on models.dev";
+      items.push(element("li", { text: modelLabel(model, group) + " in " + group.title + ": " + reason }));
+    }
+  }
+  if (items.length === 0) return null;
+  const summary = element("summary", { text: "Models with nothing to fill (" + items.length + ")" });
+  return element("details", null, [summary, element("ul", null, items)]);
+}
+
+function renderPreview(preview) {
+  const changesById = new Map();
+  for (const model of preview.models) {
+    for (const change of model.changes) changesById.set(change.id, change);
+  }
+  lastPreview = { etag: preview.etag, changesById };
+  renderCatalogStatus(preview.catalog);
+
+  const groups = groupByEntry(preview.models);
+  const detailTable = changeTable(groups, (change) => change.field !== THINKING_FIELD);
+  const thinkingTable = changeTable(groups, (change) => change.field === THINKING_FIELD);
+  const hasUntickedRows = [...changesById.values()].some((change) => !change.is_selected_by_default);
+
+  const parts = [];
+  if (changesById.size === 0) {
+    parts.push(element("p", { text: "Nothing to fill. Every model either has its fields set or is not on models.dev." }));
+  }
+  if (hasUntickedRows) {
+    parts.push(element("p", {
+      className: "warning-text",
+      text: "Rows from the model maker or another host are not ticked. Their values can differ from your provider's, so check them first.",
+    }));
+  }
+  if (detailTable) {
+    parts.push(element("h2", { text: "Model details" }), detailTable);
+  }
+  if (thinkingTable) {
+    parts.push(
+      element("h2", { text: "Thinking levels" }),
+      element("p", {
+        className: "muted",
+        text: "CPA limits thinking requests for a model to the levels saved here. \"none\" means thinking can be turned off.",
+      }),
+      thinkingTable,
+    );
+  }
+  parts.push(unchangedList(groups));
+  document.getElementById("results").replaceChildren(...parts.filter(Boolean));
+  document.getElementById("save-bar").hidden = changesById.size === 0;
+  updateSelectedCount();
+}
+
+function changeCheckboxes() {
+  return [...document.querySelectorAll("input[data-change-id]")];
+}
+
+function updateSelectedCount() {
+  const checkboxes = changeCheckboxes();
+  const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+  document.getElementById("selected-count").textContent =
+    selectedCount + " of " + checkboxes.length + " changes selected";
+}
+
+function setAllCheckboxes(isChecked) {
+  for (const checkbox of changeCheckboxes()) checkbox.checked = isChecked;
+  updateSelectedCount();
+}
+
+async function saveSelected() {
+  if (isBusy || !lastPreview) return;
+  const pickedChanges = [];
+  for (const checkbox of changeCheckboxes()) {
+    if (!checkbox.checked) continue;
+    const change = lastPreview.changesById.get(checkbox.dataset.changeId);
+    if (change) pickedChanges.push({ id: change.id, proposed: change.proposed });
+  }
+  if (pickedChanges.length === 0) {
+    showMessage("info", "Nothing is selected, so nothing was saved.");
+    return;
+  }
+  const choicesBeforeSave = currentChoices();
+  setBusy(true);
+  showMessage("info", "Saving...");
+  let result;
+  try {
+    result = await callRoute("POST", "apply", {
+      cpa_port: cpaPort,
+      etag: lastPreview.etag,
+      changes: pickedChanges,
+    });
+  } catch (error) {
+    setBusy(false);
+    if (error.status === 0) {
+      showMessage("error", "Could not save: " + error.message
+        + ". CPA also closes the connection when it does not accept the management key."
+        + " Press Preview to see what is saved now.");
+    } else {
+      handleError(error, "Could not save");
+    }
+    return;
+  }
+  setBusy(false);
+  const changeWord = result.applied_count === 1 ? " change" : " changes";
+  showMessage("ok", result.is_written
+    ? "Saved " + result.applied_count + changeWord + ". CPA reloads its config in the background."
+    : "Nothing needed saving.");
+  await runPreview(false, true, choicesBeforeSave);
+}
+
+document.getElementById("preview-button").addEventListener("click", () => runPreview(false, false));
+document.getElementById("refresh-button").addEventListener("click", () => runPreview(true, false));
+document.getElementById("save-button").addEventListener("click", saveSelected);
+document.getElementById("tick-all-button").addEventListener("click", () => setAllCheckboxes(true));
+document.getElementById("untick-all-button").addEventListener("click", () => setAllCheckboxes(false));
+document.getElementById("key-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const input = document.getElementById("key-input");
+  manualKey = input.value.trim();
+  input.value = "";
+  if (!manualKey) return;
+  document.getElementById("key-status").textContent = "Using the key you typed. It is kept in this page only.";
+  document.getElementById("key-form").hidden = true;
+  runPreview(false, false);
+});
+
+if (storedManagementKey()) {
+  document.getElementById("key-status").textContent = "Using the management key from your CPA login.";
+} else {
+  showKeyForm("No saved management key was found. Type it below.");
+}
+</script>
+</body>
+</html>

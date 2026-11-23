@@ -1,0 +1,24 @@
+[package]
+name = "fill-model-details"
+version = "0.1.0"
+edition = "2024"
+description = "CLIProxyAPI plugin that fills missing model details from models.dev"
+license = "MIT"
+publish = false
+
+[lib]
+name = "fill_model_details"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+base64 = "0.23.1"
+serde = { version = "1.0.229", features = ["derive"] }
+# preserve_order keeps config keys in CPA's order when the plugin writes them back.
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+
+[profile.release]
+# Panics must unwind so the C entry points can catch them before they reach CPA.
+panic = "unwind"
+lto = true
+codegen-units = 1
+strip = true

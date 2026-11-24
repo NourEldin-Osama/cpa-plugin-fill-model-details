@@ -2,10 +2,10 @@
 
 A plugin for CLIProxyAPI (CPA). It fills empty model details in your CPA
 config with data from [models.dev](https://models.dev): display name, context
-window, input types (text, image), and thinking levels.
+window, input modalities (text, image), and reasoning levels.
 
-Nothing changes until you press a button. The page first shows a preview, and
-you pick which rows to save.
+Nothing changes until you press Save. The page lists what it can fill, and
+you pick which values to save.
 
 The idea comes from the "Fill model details" button in
 [pi-web](https://github.com/agegr/pi-web).
@@ -15,14 +15,16 @@ The idea comes from the "Fill model details" button in
 The plugin reads the model lists of your `openai-compatibility` and `codex`
 API-key entries. For each model it fills a field only when the field is empty:
 
-| CPA field | Value from models.dev | Counts as empty |
-|---|---|---|
-| `display-name` | model name | missing, empty, or the same as the model id |
-| `max-context-length` | context window | missing or 0 |
-| `input-modalities` | input types, only `text` and `image` | missing or empty |
-| `thinking.levels` | thinking effort levels | no thinking levels and no min or max |
+| Name on the page | CPA field | Value from models.dev | Counts as empty |
+|---|---|---|---|
+| Display name | `display-name` | model name | missing, empty, or the same as the model id |
+| Context window | `max-context-length` | context window | missing or 0 |
+| Input modalities | `input-modalities` | only `text` and `image` | missing or empty |
+| Reasoning levels | `thinking.levels` | thinking effort levels | no levels and no min or max |
 
-- `codex` models have no input types field, so they never get one.
+The names on the page are the same as in the app's own model form.
+
+- `codex` models have no input modalities field, so they never get one.
 - Fields that already have a value are never changed. All other keys in your
   config stay as they are.
 - Tool support, max output tokens, model status, and model type are shown on
@@ -34,19 +36,21 @@ The model id must match exactly (letter case does not matter). There is no
 fuzzy matching.
 
 1. **Same host**: a models.dev provider with the same host as your entry's
-   base URL. These rows are ticked by default.
+   base URL. These values are ticked by default.
 2. **Model maker**: the maker named in the id (for example `moonshotai` in
    `moonshotai/kimi-k3.1-pro`), or the maker that models.dev links the model
-   to. These rows are not ticked.
-3. **Other host**: any other provider that has the same model id. These rows
-   are not ticked.
+   to. These values are not ticked.
+3. **Other host**: any other provider that has the same model id. These
+   values are not ticked.
 
 Values can differ between hosts. For example, one host may give a model a
-smaller context window than its maker does. Check the rows that are not
-ticked before you tick them.
+smaller context window than its maker does. Check the values that are not
+ticked before you tick them. The page marks them "Model maker" or "Other
+host".
 
-Thinking levels have their own table, because CPA uses them: it limits the
-thinking a request can ask for to the levels saved for the model.
+Reasoning levels have their own line under each model, because CPA uses them:
+it limits the thinking a request can ask for to the levels saved for the
+model.
 
 ## Install
 
@@ -55,34 +59,40 @@ Windows x64.
 
 1. Build the plugin (see below).
 2. Copy `fill_model_details.dll` into your CPA plugins folder and rename it to
-   `fill-model-details.dll`. The file name sets the plugin id.
-3. Turn the plugin on in CPA's `config.yaml`:
+   `fill-model-details.dll`. The file name sets the plugin id. With the
+   default setting (`plugins.dir: plugins`), the folder on Windows x64 is
+   `plugins\windows\amd64` in CPA's folder.
+3. Turn the plugin on. In EasyCLIProxyAPI, use the switch on the **Plugins**
+   screen: CPA then loads the plugin at once, without a restart. Without the
+   app, set it in CPA's `config.yaml`, and restart CPA if the plugin does not
+   show up:
 
    ```yaml
    plugins:
      enabled: true
-     dir: "C:/path/to/plugins"
      configs:
        fill-model-details:
          enabled: true
    ```
 
-4. Restart CPA.
-
 ## Use
 
-1. Open the CPA management panel and choose **Fill Model Details** in the
-   plugin menu.
-2. Press **Preview**. The first preview downloads about 7 MB from models.dev.
-3. Check the rows. Tick or untick them.
-4. Press **Save selected**. CPA saves the config and reloads it in the
-   background.
+1. Open **Plugins**, then **Fill Model Details**. The list loads by itself.
+   The first time, the plugin downloads about 7 MB from models.dev.
+2. Check the values. Tick or untick them: one value, a whole model with the
+   box in front of it, or everything with the box at the top.
+3. Press **Save**. CPA saves the config and reloads it in the background.
 
-The page tries to use the management key from your CPA login. If it finds
-none, or CPA does not accept it, the page asks for the key. A typed key stays in the page only and is never saved.
+Each model shows its four details. A detail is either offered with a tick
+box, marked "Already set", or has no value on models.dev. Models with nothing
+to fill are in a folded list under the table.
 
-If the config changes between Preview and Save, the save is refused and
-nothing is written. Press Preview again to see the current state.
+The page uses the management key from your CPA login. If it finds none, or
+CPA does not accept it, the page asks for the key. A typed key stays in the
+page only and is never saved.
+
+If the config changes after the list was made, the save is refused and
+nothing is written. The page then loads the current list.
 
 ## Limits
 
@@ -101,7 +111,7 @@ nothing is written. Press Preview again to see the current state.
 - A copy is kept in `%LOCALAPPDATA%\cpa-plugin-fill-model-details\` (on other
   systems: `$XDG_CACHE_HOME/cpa-plugin-fill-model-details/` or
   `~/.cache/cpa-plugin-fill-model-details/`). A copy older than one day is
-  downloaded again. **Download fresh models.dev data** on the page downloads
+  downloaded again when the page opens. **Update data** on the page downloads
   it at once. Delete the folder to remove the copy.
 - Provider API keys never reach the page. The management key is passed on to
   CPA's own settings API for each request and is never stored.
@@ -133,3 +143,6 @@ built on.
 ## Licence
 
 MIT. See `LICENSE`. The models.dev data and pi-web are also MIT licensed.
+
+The page's icons are from [Lucide](https://lucide.dev) (ISC License). Their
+licence notice is in `src/page.html`.

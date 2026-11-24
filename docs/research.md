@@ -183,8 +183,30 @@ A field is filled only when it is empty:
 - Shown as information only, never saved: tool support, max output tokens,
   "on or off only" thinking, status, and type.
 
-Thinking levels are shown in their own table, and rows from the model maker or
-another host are not ticked unless the user ticks them.
+Values from the model maker or another host are not ticked unless the user
+ticks them.
+
+## The page
+
+- The page uses the names of the app's own model form: Display name, Context
+  window, Input modalities, Reasoning levels.
+- One table, one model per row, grouped by provider entry. Reasoning levels
+  sit on their own line under each model, with the tool support and max
+  output next to them.
+- The preview reply lists, for every model, its four `details`. Each has a
+  `state`: `fill` (offered, with a change in `changes`), `set` (the config
+  already has a value, sent as `current`), `not_used` (codex input
+  modalities) or `no_data` (with a `no_data_reason`: `not_found`,
+  `not_listed`, `same_as_id`, `no_thinking`, `on_off_only`). Only these four
+  field values leave the config, never keys.
+- The list loads once when the page opens. The page never loads again by
+  itself after a refused key; it reloads once after a save and once after a
+  refused save (HTTP 409).
+- Colors, sizes and corner shapes were measured from screenshots of the
+  EasyCLIProxyAPI app (light theme). The dark theme follows
+  `prefers-color-scheme`, as the app's own plugin toolbar does; its colors
+  were not compared with the app.
+- Icons: Lucide, ISC License, as inline SVG.
 
 ## Rules for code inside the CPA process
 
@@ -222,6 +244,24 @@ live CPA.
   also applies to local clients. A successful login resets the count.
 - A plugin route gets the query string as `Query`, in the form
   `{"name": ["value"]}`.
+
+## Findings on the live install (2026-11-24)
+
+EasyCLIProxyAPI v0.3.117 with CPA core v8.0.80.
+
+- The app shows a plugin page inside its own window, in a web view of about
+  1254 by 780 pixels at a window width of 1535. It puts a small floating
+  toolbar (move, back, reload, open in browser) at the bottom right of the
+  page, so page controls should stay out of that corner.
+- Before the page loads, the app stores the management key in
+  `localStorage["cli-proxy-auth"]`; the page picked it up without asking.
+- The plugins setting was `enabled: true`, `dir: plugins`. The DLL went into
+  `plugins\windows\amd64`. The app's Plugins screen turned it on with
+  `PUT /v8/management/config/plugins/configs/<id>/enabled`, and CPA loaded
+  it at once, with no restart. CPA loads a copy from a `.shadow` folder;
+  replacing the DLL while it is loaded was not tested.
+- The app calls the management API about every 15 seconds. Each accepted
+  call resets CPA's failed-key count for `127.0.0.1` (read in code).
 
 ## Similar plugins
 

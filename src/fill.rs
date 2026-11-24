@@ -72,6 +72,46 @@ pub struct FieldChange {
     location: ModelLocation,
 }
 
+/// What the page shows for one of a model's four details.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DetailState {
+    /// The field is empty and models.dev has a value: offered as a change.
+    Fill,
+    /// The config already holds a value.
+    Set,
+    /// CPA has no such field for this kind of entry.
+    NotUsed,
+    /// The field is empty and models.dev has nothing to offer.
+    NoData,
+}
+
+/// Why models.dev has nothing to offer for an empty field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NoDataReason {
+    /// The model is not on models.dev.
+    NotFound,
+    /// models.dev lists the model without this value.
+    NotListed,
+    /// The models.dev name is the model id itself.
+    SameAsId,
+    /// The model does not think.
+    NoThinking,
+    /// Thinking can only be switched on or off.
+    OnOffOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FieldDetail {
+    pub field: &'static str,
+    pub state: DetailState,
+    /// The value in the config now; null when the field is missing.
+    pub current: Value,
+    /// Set only when the state is `NoData`.
+    pub no_data_reason: Option<NoDataReason>,
+}
+
 /// The models.dev entry a config model was matched to.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ModelSource {
@@ -96,6 +136,9 @@ pub struct ModelPreview {
     pub entry_host: Option<String>,
     pub model_id: String,
     pub source: Option<ModelSource>,
+    /// The model's four details, in a fixed order. A detail in the `Fill`
+    /// state has its change in `changes`.
+    pub details: Vec<FieldDetail>,
     pub changes: Vec<FieldChange>,
 }
 
@@ -106,8 +149,9 @@ pub struct RequestedChange {
     pub proposed: Value,
 }
 
-/// Lists every model in the `api-keys` node with the empty fields that the
-/// matched models.dev entry can fill. Provider keys are never copied out.
+/// Lists every model in the `api-keys` node with the state of its four
+/// details and the empty fields that the matched models.dev entry can fill.
+/// Only those four field values are copied out, never provider keys.
 pub fn plan(api_keys: &Value, catalog: &Catalog) -> Vec<ModelPreview> {
     let mut previews = Vec::new();
     for section in SECTIONS {
@@ -123,15 +167,14 @@ pub fn plan(api_keys: &Value, catalog: &Catalog) -> Vec<ModelPreview> {
                     continue;
                 };
                 let found = catalog.find(&base_url, &model_id);
-                let changes = found
-                    .map(|found| field_changes(&location, model, &model_id, &found))
-                    .unwrap_or_default();
+                let (details, changes) = model_details(&location, model, &model_id, found.as_ref());
                 previews.push(ModelPreview {
                     location,
                     entry_name: entry_name.clone(),
                     entry_host: entry_host.clone(),
                     model_id,
                     source: found.map(|found| model_source(&found)),
+                    details,
                     changes,
                 });
             }
@@ -234,80 +277,157 @@ fn entry_models<'a>(
     models
 }
 
-fn field_changes(
+/// What models.dev offers for one field.
+enum Offer {
+    Fill(Value),
+    Set,
+    NotUsed,
+    NoData(NoDataReason),
+}
+
+/// The state of each of the four details, with a change for every detail
+/// that can be filled. Both come from one pass, so they always agree.
+fn model_details(
     location: &ModelLocation,
     model: &Value,
     model_id: &str,
-    found: &CatalogMatch<'_>,
-) -> Vec<FieldChange> {
-    let is_selected_by_default = found.kind == MatchKind::SameHost;
-    let source_model = found.model;
-    let mut changes = Vec::new();
-    let mut add_change = |field: &'static str, current: Value, proposed: Value| {
-        changes.push(FieldChange {
-            id: location.change_id(field),
-            field,
-            current,
-            proposed,
-            is_selected_by_default,
-            location: location.clone(),
-        });
-    };
-
-    // A models.dev name equal to the id would count as empty again next time.
-    if let Some(source_name) = &source_model.name
-        && !source_name.eq_ignore_ascii_case(model_id)
-        && display_name_is_empty(model.get(DISPLAY_NAME), model_id)
-    {
-        add_change(
+    found: Option<&CatalogMatch<'_>>,
+) -> (Vec<FieldDetail>, Vec<FieldChange>) {
+    let is_selected_by_default = found.is_some_and(|found| found.kind == MatchKind::SameHost);
+    let current_levels = model
+        .pointer("/thinking/levels")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let offers = [
+        (
             DISPLAY_NAME,
             current_value(model, DISPLAY_NAME),
-            json!(source_name),
-        );
-    }
-
-    if let Some(context_tokens) = source_model.context_tokens
-        && number_is_empty(model.get(CONTEXT_LENGTH))
-    {
-        add_change(
+            display_name_offer(model, model_id, found),
+        ),
+        (
             CONTEXT_LENGTH,
             current_value(model, CONTEXT_LENGTH),
-            json!(context_tokens),
-        );
-    }
+            context_offer(model, found),
+        ),
+        (
+            INPUT_MODALITIES,
+            current_value(model, INPUT_MODALITIES),
+            input_modalities_offer(location, model, found),
+        ),
+        (
+            THINKING_LEVELS,
+            current_levels,
+            thinking_offer(model, found),
+        ),
+    ];
 
-    // Codex models have no input-modalities field in CPA.
-    if location.section == OPENAI_COMPATIBILITY && list_is_empty(model.get(INPUT_MODALITIES)) {
-        let input_modalities: Vec<&str> = SUPPORTED_INPUT_MODALITIES
-            .into_iter()
-            .filter(|modality| {
-                source_model
-                    .input_modalities
-                    .iter()
-                    .any(|source_modality| source_modality == modality)
-            })
-            .collect();
-        if !input_modalities.is_empty() {
-            add_change(
-                INPUT_MODALITIES,
-                current_value(model, INPUT_MODALITIES),
-                json!(input_modalities),
-            );
+    let mut details = Vec::new();
+    let mut changes = Vec::new();
+    for (field, current, offer) in offers {
+        let (state, no_data_reason) = match &offer {
+            Offer::Fill(_) => (DetailState::Fill, None),
+            Offer::Set => (DetailState::Set, None),
+            Offer::NotUsed => (DetailState::NotUsed, None),
+            Offer::NoData(reason) => (DetailState::NoData, Some(*reason)),
+        };
+        details.push(FieldDetail {
+            field,
+            state,
+            current: current.clone(),
+            no_data_reason,
+        });
+        if let Offer::Fill(proposed) = offer {
+            changes.push(FieldChange {
+                id: location.change_id(field),
+                field,
+                current,
+                proposed,
+                is_selected_by_default,
+                location: location.clone(),
+            });
         }
     }
+    (details, changes)
+}
 
-    if source_model.reasoning
-        && let Some(levels) = &source_model.thinking_levels
-        && thinking_is_empty(model.get("thinking"))
-    {
-        let current_levels = model
-            .pointer("/thinking/levels")
-            .cloned()
-            .unwrap_or(Value::Null);
-        add_change(THINKING_LEVELS, current_levels, json!(levels));
+fn display_name_offer(model: &Value, model_id: &str, found: Option<&CatalogMatch<'_>>) -> Offer {
+    if !display_name_is_empty(model.get(DISPLAY_NAME), model_id) {
+        return Offer::Set;
     }
+    let Some(found) = found else {
+        return Offer::NoData(NoDataReason::NotFound);
+    };
+    match &found.model.name {
+        None => Offer::NoData(NoDataReason::NotListed),
+        // A models.dev name equal to the id would count as empty again next time.
+        Some(source_name) if source_name.eq_ignore_ascii_case(model_id) => {
+            Offer::NoData(NoDataReason::SameAsId)
+        }
+        Some(source_name) => Offer::Fill(json!(source_name)),
+    }
+}
 
-    changes
+fn context_offer(model: &Value, found: Option<&CatalogMatch<'_>>) -> Offer {
+    if !number_is_empty(model.get(CONTEXT_LENGTH)) {
+        return Offer::Set;
+    }
+    let Some(found) = found else {
+        return Offer::NoData(NoDataReason::NotFound);
+    };
+    match found.model.context_tokens {
+        Some(context_tokens) => Offer::Fill(json!(context_tokens)),
+        None => Offer::NoData(NoDataReason::NotListed),
+    }
+}
+
+fn input_modalities_offer(
+    location: &ModelLocation,
+    model: &Value,
+    found: Option<&CatalogMatch<'_>>,
+) -> Offer {
+    // Codex models have no input-modalities field in CPA.
+    if location.section != OPENAI_COMPATIBILITY {
+        return Offer::NotUsed;
+    }
+    if !list_is_empty(model.get(INPUT_MODALITIES)) {
+        return Offer::Set;
+    }
+    let Some(found) = found else {
+        return Offer::NoData(NoDataReason::NotFound);
+    };
+    let input_modalities: Vec<&str> = SUPPORTED_INPUT_MODALITIES
+        .into_iter()
+        .filter(|modality| {
+            found
+                .model
+                .input_modalities
+                .iter()
+                .any(|source_modality| source_modality == modality)
+        })
+        .collect();
+    if input_modalities.is_empty() {
+        Offer::NoData(NoDataReason::NotListed)
+    } else {
+        Offer::Fill(json!(input_modalities))
+    }
+}
+
+fn thinking_offer(model: &Value, found: Option<&CatalogMatch<'_>>) -> Offer {
+    if !thinking_is_empty(model.get("thinking")) {
+        return Offer::Set;
+    }
+    let Some(found) = found else {
+        return Offer::NoData(NoDataReason::NotFound);
+    };
+    let source_model = found.model;
+    if !source_model.reasoning {
+        return Offer::NoData(NoDataReason::NoThinking);
+    }
+    match &source_model.thinking_levels {
+        Some(levels) => Offer::Fill(json!(levels)),
+        None if source_model.is_thinking_toggle_only => Offer::NoData(NoDataReason::OnOffOnly),
+        None => Offer::NoData(NoDataReason::NotListed),
+    }
 }
 
 fn model_source(found: &CatalogMatch<'_>) -> ModelSource {
@@ -515,6 +635,93 @@ mod tests {
         let particle = preview_for(&previews, "particle-ai/particle-1:free");
         assert!(particle.source.is_none());
         assert!(particle.changes.is_empty());
+    }
+
+    fn detail_for<'a>(preview: &'a ModelPreview, field: &str) -> &'a FieldDetail {
+        preview
+            .details
+            .iter()
+            .find(|detail| detail.field == field)
+            .expect("every model lists the field")
+    }
+
+    #[test]
+    fn details_agree_with_changes() {
+        let mut api_keys = sample_api_keys();
+        api_keys["openai-compatibility"][0]["models"][3]["display-name"] = json!("My GLM");
+        let previews = plan(&api_keys, &sample_catalog());
+        for preview in &previews {
+            let detail_fields: Vec<&str> =
+                preview.details.iter().map(|detail| detail.field).collect();
+            assert_eq!(
+                detail_fields,
+                [
+                    DISPLAY_NAME,
+                    CONTEXT_LENGTH,
+                    INPUT_MODALITIES,
+                    THINKING_LEVELS
+                ]
+            );
+            let fillable_fields: Vec<&str> = preview
+                .details
+                .iter()
+                .filter(|detail| detail.state == DetailState::Fill)
+                .map(|detail| detail.field)
+                .collect();
+            assert_eq!(fillable_fields, fields_of(preview), "{}", preview.model_id);
+            for detail in &preview.details {
+                let has_reason = detail.no_data_reason.is_some();
+                assert_eq!(has_reason, detail.state == DetailState::NoData);
+            }
+        }
+    }
+
+    #[test]
+    fn details_say_why_nothing_is_offered() {
+        let mut api_keys = sample_api_keys();
+        let glm = api_keys
+            .pointer_mut("/openai-compatibility/0/models/3")
+            .expect("glm is the fourth model");
+        glm["display-name"] = json!("My GLM");
+        glm["thinking"] = json!({ "levels": ["high"] });
+        let previews = plan(&api_keys, &sample_catalog());
+
+        let glm_preview = preview_for(&previews, "z-ai/glm-5.3-flash");
+        let glm_name = detail_for(glm_preview, DISPLAY_NAME);
+        assert_eq!(glm_name.state, DetailState::Set);
+        assert_eq!(glm_name.current, json!("My GLM"));
+        let glm_levels = detail_for(glm_preview, THINKING_LEVELS);
+        assert_eq!(glm_levels.state, DetailState::Set);
+        assert_eq!(glm_levels.current, json!(["high"]));
+        assert_eq!(
+            detail_for(glm_preview, CONTEXT_LENGTH).state,
+            DetailState::Fill
+        );
+
+        let state_of = |model_id: &str, field: &str| {
+            let detail = detail_for(preview_for(&previews, model_id), field);
+            (detail.state, detail.no_data_reason)
+        };
+        assert_eq!(
+            state_of("baidu/ernie-5.5-flash-preview:free", INPUT_MODALITIES),
+            (DetailState::NotUsed, None)
+        );
+        assert_eq!(
+            state_of("nvidia/nemotron-3.5-super-vl:free", THINKING_LEVELS),
+            (DetailState::NoData, Some(NoDataReason::OnOffOnly))
+        );
+        assert_eq!(
+            state_of("openrouter/free", THINKING_LEVELS),
+            (DetailState::NoData, Some(NoDataReason::NotListed))
+        );
+        assert_eq!(
+            state_of("particle-ai/particle-1:free", DISPLAY_NAME),
+            (DetailState::NoData, Some(NoDataReason::NotFound))
+        );
+        assert_eq!(
+            state_of("particle-ai/particle-1:free", INPUT_MODALITIES),
+            (DetailState::NotUsed, None)
+        );
     }
 
     #[test]

@@ -3,117 +3,306 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Fill Model Details</title>
 <style>
+  /* Colors follow the EasyCLIProxyAPI desktop app, so the page looks like part of it. */
   :root {
     --background: #ffffff;
-    --text: #1f2328;
-    --muted: #59636e;
-    --border: #d1d9e0;
-    --group: #f6f8fa;
-    --accent: #0969da;
-    --accent-text: #ffffff;
-    --ok-background: #dafbe1;
-    --ok-text: #116329;
-    --warning-background: #fff8c5;
-    --warning-text: #7d4e00;
-    --error-background: #ffebe9;
-    --error-text: #a40e26;
+    --soft: #f7f8fa;
+    --softer: #fcfcfd;
+    --line: #e2e8f0;
+    --line-soft: #eef1f5;
+    --text: #0f172a;
+    --text-2: #334155;
+    --muted: #536073;
+    --primary: #222222;
+    --primary-hover: #3a3a3a;
+    --primary-text: #ffffff;
+    --button-hover: #f4f6f8;
+    --tag: #f1f5f9;
+    --amber-background: #fff7e9;
+    --amber-line: #e3c79f;
+    --amber-text: #8f5e22;
+    --green: #2f6b3f;
+    --green-background: #edf7ee;
+    --green-line: #bfdcc5;
+    --red-background: #fff1f2;
+    --red-line: #f3c0c6;
+    --red-text: #be123c;
+    --focus: #2563eb;
+    --head-height: 0px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --background: #0d1117;
-      --text: #e6edf3;
-      --muted: #9198a1;
-      --border: #3d444d;
-      --group: #151b23;
-      --accent: #4493f8;
-      --accent-text: #0d1117;
-      --ok-background: #12261e;
-      --ok-text: #56d364;
-      --warning-background: #272115;
-      --warning-text: #e3b341;
-      --error-background: #2d1214;
-      --error-text: #ff7b72;
+      --background: #0f1115;
+      --soft: #171a21;
+      --softer: #13161c;
+      --line: #2a303b;
+      --line-soft: #20252e;
+      --text: #e8ecf3;
+      --text-2: #c5ccd8;
+      --muted: #9aa5b6;
+      --primary: #f1f3f5;
+      --primary-hover: #ffffff;
+      --primary-text: #111318;
+      --button-hover: #1c2029;
+      --tag: #232936;
+      --amber-background: #2a2213;
+      --amber-line: #5d4a22;
+      --amber-text: #e8c27c;
+      --green: #74d08f;
+      --green-background: #13261a;
+      --green-line: #2c5a3a;
+      --red-background: #2c1418;
+      --red-line: #6b2a33;
+      --red-text: #ff9aa8;
+      --focus: #7aa7ff;
     }
   }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--background);
     color: var(--text);
     font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
-  main { max-width: 1200px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 17px; margin: 28px 0 6px; }
-  .muted { color: var(--muted); }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
-  .save-bar {
-    position: sticky; bottom: 0; padding: 10px 0;
-    background: var(--background); border-top: 1px solid var(--border);
+  /* The bottom space keeps the last row clear of the app's floating toolbar. */
+  main { max-width: 1261px; margin: 0 auto; padding: 0 34px 56px 27px; }
+  h1 { font-size: 22px; line-height: 1.3; font-weight: 700; margin: 0; }
+  p { margin: 0; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  input[type="checkbox"] { width: 16px; height: 16px; margin: 0; flex: none; cursor: pointer; }
+  .icon {
+    width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
   }
-  button {
-    font: inherit; padding: 6px 12px; border-radius: 6px; cursor: pointer;
-    border: 1px solid var(--border); background: var(--group); color: var(--text);
+  .sprite { position: absolute; width: 0; height: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { animation: spin 0.9s linear infinite; }
+
+  .head {
+    position: sticky; top: 0; z-index: 3; background: var(--background);
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+    padding: 20px 0 10px;
   }
-  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-  button:disabled { opacity: 0.55; cursor: default; }
-  input[type="password"] {
-    font: inherit; padding: 5px 8px; min-width: 260px;
-    border: 1px solid var(--border); border-radius: 6px;
-    background: var(--background); color: var(--text);
+  .head.is-scrolled { box-shadow: 0 1px 0 var(--line); }
+  .sub { color: var(--muted); margin-top: 3px; }
+  .actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+  .count { color: var(--muted); font-size: 12.5px; margin-right: 6px; white-space: nowrap; }
+  .meta { font-size: 12.5px; color: var(--muted); text-align: right; margin-top: 6px; }
+  .meta.is-warning { color: var(--amber-text); }
+
+  .button {
+    height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--background); color: var(--text); font: inherit; font-weight: 600; line-height: 1;
+    display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; cursor: pointer;
+    transition: background-color 0.12s, border-color 0.12s, transform 0.12s;
   }
-  #key-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  [hidden] { display: none !important; }
-  .message { padding: 8px 12px; border-radius: 6px; margin: 8px 0; }
-  .message.info { background: var(--group); }
-  .message.ok { background: var(--ok-background); color: var(--ok-text); }
-  .message.warning { background: var(--warning-background); color: var(--warning-text); }
-  .message.error { background: var(--error-background); color: var(--error-text); }
-  .warning-text { color: var(--warning-text); }
-  .table-wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; min-width: 760px; }
-  th, td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-  thead th { font-weight: 600; color: var(--muted); white-space: nowrap; }
-  th.group { background: var(--group); font-weight: 600; }
-  td.value { word-break: break-word; }
-  td.model { font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; }
-  .tag { display: inline-block; padding: 0 6px; border-radius: 10px; font-size: 12px; margin-left: 4px; }
-  .tag.same-host { background: var(--ok-background); color: var(--ok-text); }
-  .tag.check { background: var(--warning-background); color: var(--warning-text); }
-  .info { font-size: 12px; color: var(--muted); }
-  details { margin-top: 24px; }
-  details li { margin: 2px 0; }
+  .button:hover:not(:disabled) { background: var(--button-hover); }
+  .button:active:not(:disabled) { transform: scale(0.98); }
+  .button:disabled { opacity: 0.5; cursor: default; }
+  .button.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+  .button.primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
+  .button.small { height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12.5px; }
+
+  .banner {
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; margin-bottom: 10px;
+    background: var(--soft); color: var(--text-2);
+  }
+  .banner > span { display: flex; align-items: center; gap: 8px; }
+  .banner b { color: var(--text); font-weight: 600; white-space: nowrap; }
+  .banner.is-warning { background: var(--amber-background); border-color: var(--amber-line); color: var(--amber-text); }
+  .banner.is-error { background: var(--red-background); border-color: var(--red-line); color: var(--red-text); }
+  .banner.is-ok { background: var(--green-background); border-color: var(--green-line); color: var(--green); }
+
+  .key-card {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+    border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px;
+  }
+  .key-card label { font-weight: 600; }
+  .key-card input {
+    height: 36px; min-width: 260px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--background); color: var(--text); font: inherit;
+  }
+  .key-card .note { flex-basis: 100%; font-size: 12.5px; color: var(--muted); }
+
+  .card { border: 1px solid var(--line); border-radius: 14px; background: var(--background); overflow: clip; }
+  #content[aria-busy="true"] { opacity: 0.6; pointer-events: none; }
+
+  .models { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .models th, .models td { text-align: left; vertical-align: middle; padding: 0 12px 0 0; font-weight: 400; }
+  .models th:last-child, .models td:last-child { padding-right: 16px; }
+  .models .check-cell { width: 44px; padding: 0; text-align: center; }
+  /* Without the tick column, the first cell needs its own left edge. */
+  .models.is-plain th:first-child, .models.is-plain td:first-child { padding-left: 16px; }
+  .models .check-cell input { vertical-align: middle; }
+  .column-model { width: 42%; }
+  .column-name { width: 22.5%; }
+  .column-context { width: 17%; }
+  .models thead th {
+    position: sticky; top: var(--head-height); z-index: 2; background: var(--soft);
+    padding-top: 9px; padding-bottom: 9px; font-size: 12.5px; font-weight: 600; color: var(--muted);
+  }
+  .narrow-label { display: none; }
+  .group-row th { background: var(--softer); border-top: 1px solid var(--line-soft); padding: 8px 16px 7px; }
+  .group-name { font-size: 14px; font-weight: 600; margin-right: 8px; }
+  .group-where { font-size: 12.5px; color: var(--muted); }
+  .main-row td { border-top: 1px solid var(--line-soft); padding-top: 6px; }
+  .reason-row td { padding-top: 4px; padding-bottom: 6px; }
+  .model:hover td { background: var(--softer); }
+
+  .model-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+  .model-id {
+    font: 600 14px/1.3 ui-monospace, "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+    overflow-wrap: anywhere;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--background);
+    color: var(--text-2); font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .chip .icon { width: 13px; height: 13px; }
+  .chip.is-check { background: var(--amber-background); border-color: var(--amber-line); color: var(--amber-text); }
+  .chip.is-plain { color: var(--muted); }
+
+  .pick { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; cursor: pointer; font-weight: 500; }
+  .value { overflow-wrap: anywhere; }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag {
+    display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px;
+    background: var(--tag); font-size: 12.5px;
+  }
+  .is-set { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; color: var(--muted); }
+  .caption { font-size: 12px; color: var(--muted); }
+  .reason-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 22px; }
+  .reason-line.has-no-box { padding-left: 24px; }
+  .models.is-plain .reason-line.has-no-box { padding-left: 0; }
+  .field-label { font-size: 12.5px; color: var(--muted); white-space: nowrap; font-weight: 400; }
+  .facts { margin-left: auto; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+
+  .done { margin-top: 12px; }
+  .done summary {
+    display: flex; align-items: center; gap: 8px; padding: 10px 16px; cursor: pointer;
+    font-weight: 600; color: var(--text-2); list-style: none;
+  }
+  .done summary::-webkit-details-marker { display: none; }
+  .done summary .icon { transition: transform 0.12s; }
+  .done[open] summary .icon { transform: rotate(90deg); }
+  .done summary span { font-weight: 400; color: var(--muted); }
+  .done .models { border-top: 1px solid var(--line-soft); }
+
+  .state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 48px 16px; text-align: center; }
+  .state-mark {
+    width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--green-background); color: var(--green);
+  }
+  .state-mark .icon { width: 22px; height: 22px; }
+  .state-title { font-size: 16px; font-weight: 600; }
+  .state-text { color: var(--muted); }
+  .loading { display: flex; align-items: center; gap: 8px; color: var(--muted); margin-bottom: 12px; }
+  .skeleton { height: 12px; border-radius: 6px; background: var(--line-soft); }
+  .skeleton-card { padding: 16px; display: grid; gap: 12px; }
+  .foot { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; margin: 10px 2px 0; }
+
+  /* Narrow windows: each model becomes a small card, with the field name beside its value. */
+  @media (max-width: 860px) {
+    main { padding: 0 16px 56px; }
+    .head { flex-direction: column; gap: 10px; padding-top: 16px; }
+    .actions { justify-content: flex-start; flex-wrap: wrap; }
+    .meta { text-align: left; }
+    .banner { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .models, .models tbody, .models tr, .models th, .models td { display: block; width: auto; }
+    .models colgroup { display: none; }
+    .models thead { display: block; }
+    .models thead tr { display: flex; align-items: center; }
+    .models thead th { display: none; position: static; }
+    .models thead th.check-cell { display: flex; align-items: center; gap: 8px; width: auto; padding: 9px 12px; }
+    .models.is-plain thead { display: none; }
+    .narrow-label { display: inline; }
+    .group-row th { padding: 8px 12px 7px; }
+    .model { border-top: 1px solid var(--line-soft); padding: 8px 12px; }
+    .main-row td, .reason-row td { border-top: 0; padding: 3px 0; }
+    .models .main-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); }
+    .models .main-row > td { grid-column: 2; }
+    .models .main-row > .check-cell { grid-column: 1; grid-row: 1; width: auto; text-align: left; padding-top: 5px; }
+    .models.is-plain .main-row { display: block; }
+    .models.is-plain th:first-child, .models.is-plain td:first-child { padding-left: 0; }
+    .models.is-plain .group-row th { padding-left: 12px; }
+    .main-row td[data-label] { display: flex; align-items: center; gap: 8px; }
+    .main-row td[data-label]::before {
+      content: attr(data-label); flex: none; width: 124px; font-size: 12.5px; color: var(--muted);
+    }
+    .reason-row > td:first-child:not([colspan]) { display: none; }
+    .models:not(.is-plain) .reason-row td[colspan] { padding-left: 28px; }
+    .reason-line.has-no-box { padding-left: 0; }
+    .facts { margin-left: 0; flex-basis: 100%; white-space: normal; }
+    .key-card input { min-width: 0; flex: 1 1 200px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spin { animation: none; }
+    .button, .done summary .icon { transition: none; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <h1>Fill Model Details</h1>
-  <p class="muted">Fills empty model fields from models.dev. Fields that already have a value are not changed. Nothing is saved until you press Save selected.</p>
+<!--
+  Icons: Lucide (https://lucide.dev), ISC License.
+  Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part
+  of Feather (MIT). All other copyright (c) for Lucide are held by Lucide
+  Contributors 2022.
+-->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="icon-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="icon-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="icon-error" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></symbol>
+  <symbol id="icon-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+</svg>
 
-  <p id="key-status"></p>
-  <form id="key-form" hidden>
+<main>
+  <header class="head" id="head">
+    <div>
+      <h1>Fill Model Details</h1>
+      <p class="sub">Fills empty model fields from models.dev. Nothing is saved until you press Save.</p>
+    </div>
+    <div>
+      <div class="actions">
+        <span id="selected-count" class="count"></span>
+        <button id="update-button" class="button" type="button" title="Download fresh models.dev data">
+          <svg id="update-icon" class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg>Update data
+        </button>
+        <button id="save-button" class="button primary" type="button" disabled>Save</button>
+      </div>
+      <p id="catalog-status" class="meta"></p>
+    </div>
+  </header>
+
+  <div id="notice" class="banner" role="status" hidden></div>
+
+  <form id="key-form" class="key-card" hidden>
     <label for="key-input">Management key</label>
     <input id="key-input" type="password" autocomplete="off" spellcheck="false">
-    <button type="submit">Use this key</button>
-    <span class="muted">The key stays in this page only. It is not saved. After 5 wrong keys, CPA blocks your address for 30 minutes.</span>
+    <button class="button" type="submit">Use this key</button>
+    <p id="key-note" class="note"></p>
   </form>
 
-  <div class="toolbar">
-    <button id="preview-button" class="primary" type="button">Preview</button>
-    <button id="refresh-button" type="button">Download fresh models.dev data</button>
+  <div id="check-banner" class="banner is-warning" hidden>
+    <span id="check-text"></span>
+    <b id="check-count"></b>
   </div>
-  <p id="catalog-status" class="muted"></p>
-  <div id="message" class="message" role="status" hidden></div>
 
-  <div id="results"></div>
+  <div id="content"></div>
 
-  <div id="save-bar" class="toolbar save-bar" hidden>
-    <button id="save-button" class="primary" type="button">Save selected</button>
-    <button id="tick-all-button" type="button">Tick all</button>
-    <button id="untick-all-button" type="button">Untick all</button>
-    <span id="selected-count" class="muted"></span>
-  </div>
+  <p id="footnote" class="foot" hidden>
+    <svg class="icon" aria-hidden="true"><use href="#icon-info"/></svg>
+    CPA limits a model's thinking requests to its saved reasoning levels.
+  </p>
 </main>
 <script>
 "use strict";
@@ -121,27 +310,46 @@
 const pluginBase = location.pathname.split("/v0/resource/plugins/")[0]
   + "/v0/management/fill-model-details/";
 const cpaPort = Number(location.port) || (location.protocol === "https:" ? 443 : 80);
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+const SEPARATOR = " " + String.fromCharCode(183) + " ";  // a middle dot
 
+const COLUMN_FIELDS = ["display-name", "max-context-length", "input-modalities"];
+const REASONING_FIELD = "thinking.levels";
+// The same names as the app's own model form.
 const FIELD_LABELS = {
   "display-name": "Display name",
   "max-context-length": "Context window",
-  "input-modalities": "Input types",
-  "thinking.levels": "Thinking levels",
+  "input-modalities": "Input modalities",
+  "thinking.levels": "Reasoning levels",
 };
 const SECTION_LABELS = {
-  "openai-compatibility": "OpenAI compatible",
-  "codex": "Codex",
+  "openai-compatibility": "OpenAI Compatible",
+  "codex": "Codex API",
 };
-const MATCH_LABELS = {
-  same_host: "same host",
-  model_maker: "model maker, check first",
-  other_host: "other host, check first",
+const NO_DATA_TEXT = {
+  not_found: "-",
+  not_listed: "No data",
+  same_as_id: "No data",
+  no_thinking: "Does not think",
+  on_off_only: "On or off only",
 };
-const THINKING_FIELD = "thinking.levels";
+const NO_DATA_TITLES = {
+  not_found: "This model is not on models.dev.",
+  not_listed: "models.dev has no value for this field.",
+  same_as_id: "models.dev uses the model id as the name.",
+  no_thinking: "models.dev says this model does not think.",
+  on_off_only: "Thinking can only be switched on or off, so there are no levels.",
+};
+const KEY_NOTE = "The key stays in this page only. It is not saved. "
+  + "After 5 wrong keys, CPA blocks your address for 30 minutes.";
 
 let manualKey = "";
 let lastPreview = null;
 let isBusy = false;
+
+const content = document.getElementById("content");
+const saveButton = document.getElementById("save-button");
+const updateButton = document.getElementById("update-button");
 
 // The web panel may store values as "enc::v1::" or "enc::v2::": XOR with a
 // fixed mask, then base64. The desktop app stores plain JSON.
@@ -177,33 +385,71 @@ function managementKey() {
   return manualKey || storedManagementKey();
 }
 
-function element(tagName, options, children) {
+// Builds an element. All text goes in as text, never as HTML.
+function element(tagName, properties, children) {
   const node = document.createElement(tagName);
-  if (options && options.className) node.className = options.className;
-  if (options && options.text !== undefined) node.textContent = options.text;
+  for (const [name, value] of Object.entries(properties || {})) {
+    if (value === undefined || value === null || value === false) continue;
+    if (name === "className") node.className = value;
+    else if (name === "text") node.textContent = value;
+    else node.setAttribute(name, value);
+  }
   for (const child of children || []) {
-    if (child !== null && child !== undefined) node.append(child);
+    if (child !== null && child !== undefined && child !== false) node.append(child);
   }
   return node;
 }
 
-function formatValue(value) {
-  if (value === null || value === undefined) return "(empty)";
-  if (Array.isArray(value)) return value.length ? value.join(", ") : "(empty)";
-  if (typeof value === "number") return value.toLocaleString("en-US");
-  if (typeof value === "string") return value.trim() === "" ? "(empty)" : value;
-  return JSON.stringify(value);
+function icon(name, extraClass) {
+  const svg = document.createElementNS(SVG_NAMESPACE, "svg");
+  svg.setAttribute("class", extraClass ? "icon " + extraClass : "icon");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS(SVG_NAMESPACE, "use");
+  use.setAttribute("href", "#icon-" + name);
+  svg.append(use);
+  return svg;
 }
 
-function showMessage(kind, text) {
-  const box = document.getElementById("message");
-  box.className = "message " + kind;
-  box.textContent = text;
-  box.hidden = !text;
+function formatNumber(value) {
+  return value.toLocaleString("en-US");
 }
 
-function showKeyForm(statusText) {
-  document.getElementById("key-status").textContent = statusText;
+function formatWhen(unixSeconds) {
+  const date = new Date(unixSeconds * 1000);
+  const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const dayMs = 24 * 60 * 60 * 1000;
+  if (date >= startOfToday) return "today, " + time;
+  if (date.getTime() >= startOfToday.getTime() - dayMs) return "yesterday, " + time;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ", " + time;
+}
+
+function plural(count, word) {
+  return count + " " + word + (count === 1 ? "" : "s");
+}
+
+// One message at a time, above the list. `action` adds a small button.
+function showNotice(kind, text, action) {
+  const box = document.getElementById("notice");
+  const iconName = kind === "ok" ? "check" : kind === "error" ? "error" : kind === "warning" ? "alert" : "info";
+  const parts = [element("span", null, [icon(iconName), element("span", { text })])];
+  if (action) {
+    const button = element("button", { className: "button small", type: "button", text: action.label });
+    button.addEventListener("click", action.run);
+    parts.push(button);
+  }
+  box.className = "banner is-" + kind;
+  box.replaceChildren(...parts);
+  box.hidden = false;
+}
+
+function clearNotice() {
+  document.getElementById("notice").hidden = true;
+}
+
+function showKeyForm() {
+  document.getElementById("key-note").textContent = KEY_NOTE;
   document.getElementById("key-form").hidden = false;
   document.getElementById("key-input").focus();
 }
@@ -242,24 +488,379 @@ async function callRoute(method, route, body) {
   return data;
 }
 
-function handleError(error, prefix) {
-  if (error.status === 401) {
-    showKeyForm("CPA did not accept the management key, or none was found. Type it below.");
-    showMessage("error", prefix + ": the management key is missing or wrong.");
-  } else if (error.status === 403) {
-    showMessage("error", prefix + ": CPA refused the request: " + error.message
-      + ". After 5 wrong keys, CPA blocks your address for 30 minutes.");
-  } else if (error.status === 409) {
-    showMessage("warning", "The config or the models.dev data changed after the preview. Nothing was saved. Press Preview to load the current state.");
-  } else {
-    showMessage("error", prefix + ": " + error.message);
+function setBusy(busy) {
+  isBusy = busy;
+  updateButton.disabled = busy;
+  document.getElementById("update-icon").classList.toggle("spin", busy);
+  content.setAttribute("aria-busy", busy ? "true" : "false");
+  if (busy) saveButton.disabled = true;
+  else syncSelection();
+}
+
+function showLoading() {
+  const skeletonCard = element("div", { className: "card skeleton-card" }, [
+    element("div", { className: "skeleton", style: "width: 30%" }),
+    element("div", { className: "skeleton", style: "width: 82%" }),
+    element("div", { className: "skeleton", style: "width: 64%" }),
+  ]);
+  content.replaceChildren(
+    element("p", { className: "loading" }, [
+      icon("loader", "spin"),
+      "Reading your models and models.dev data...",
+    ]),
+    skeletonCard,
+  );
+}
+
+// Loads the list. It never calls itself again after an error: a loop with a
+// wrong key would get this address blocked by CPA.
+async function loadList(options) {
+  const settings = options || {};
+  if (isBusy) return;
+  if (!managementKey()) {
+    showKeyForm();
+    showNotice("info", "No saved management key was found. Type it below.");
+    return;
+  }
+  setBusy(true);
+  if (!settings.keepNotice) clearNotice();
+  if (!lastPreview) showLoading();
+  try {
+    const route = "preview?cpa_port=" + cpaPort + (settings.shouldRefresh ? "&refresh=1" : "");
+    const preview = await callRoute("GET", route);
+    document.getElementById("key-form").hidden = true;
+    renderList(preview, settings.choices);
+  } catch (error) {
+    if (!lastPreview) content.replaceChildren();
+    reportLoadError(error);
+  } finally {
+    setBusy(false);
   }
 }
 
-function setBusy(busy) {
-  isBusy = busy;
-  for (const id of ["preview-button", "refresh-button", "save-button", "tick-all-button", "untick-all-button"]) {
-    document.getElementById(id).disabled = busy;
+function reportLoadError(error) {
+  if (error.status === 401) {
+    showKeyForm();
+    showNotice("error", "CPA did not accept the management key, or none was found. Type it below.");
+  } else if (error.status === 403) {
+    showNotice("error", "CPA refused the request: " + error.message
+      + ". After 5 wrong keys, CPA blocks your address for 30 minutes.");
+  } else {
+    showNotice("error", "Could not load the list: " + error.message + ".", {
+      label: "Try again",
+      run: () => loadList(),
+    });
+  }
+}
+
+function renderCatalogStatus(catalog) {
+  const status = document.getElementById("catalog-status");
+  let text = "models.dev data: " + formatWhen(catalog.downloaded_at_unix_seconds);
+  if (catalog.download_error) text += SEPARATOR + "the download failed, so this copy is used";
+  else if (catalog.is_old) text += SEPARATOR + "more than a day old";
+  if (catalog.save_error) text += SEPARATOR + "could not keep a copy on disk";
+  status.textContent = text;
+  status.title = formatNumber(catalog.model_count) + " models"
+    + (catalog.download_error ? ". Download error: " + catalog.download_error : "")
+    + (catalog.save_error ? ". Save error: " + catalog.save_error : "");
+  status.classList.toggle("is-warning", Boolean(catalog.download_error || catalog.is_old || catalog.save_error));
+}
+
+function entryKey(model) {
+  return model.location.section + "/" + model.location.entry_index;
+}
+
+function groupByEntry(models) {
+  const groups = new Map();
+  for (const model of models) {
+    const key = entryKey(model);
+    if (!groups.has(key)) {
+      const sectionLabel = SECTION_LABELS[model.location.section] || model.location.section;
+      groups.set(key, {
+        name: model.entry_name || "Entry " + (model.location.entry_index + 1),
+        where: model.entry_host ? sectionLabel + SEPARATOR + model.entry_host : sectionLabel,
+        models: [],
+      });
+    }
+    groups.get(key).models.push(model);
+  }
+  return [...groups.values()];
+}
+
+function valueNode(value) {
+  if (Array.isArray(value)) {
+    return element("span", { className: "tags" },
+      value.map((item) => element("span", { className: "tag", text: String(item) })));
+  }
+  const text = typeof value === "number" ? formatNumber(value) : String(value);
+  return element("span", { className: "value", text });
+}
+
+function changeCheckbox(model, change) {
+  const checkbox = element("input", {
+    type: "checkbox",
+    "data-change-id": change.id,
+    "aria-label": "Save " + FIELD_LABELS[change.field] + " for " + model.model_id,
+  });
+  checkbox.checked = change.is_selected_by_default;
+  checkbox.addEventListener("change", syncSelection);
+  return checkbox;
+}
+
+function noDataNode(detail) {
+  return element("span", {
+    className: "caption",
+    text: NO_DATA_TEXT[detail.no_data_reason] || "No data",
+    title: NO_DATA_TITLES[detail.no_data_reason],
+  });
+}
+
+function detailCell(model, field) {
+  const detail = model.details.find((item) => item.field === field);
+  const change = model.changes.find((item) => item.field === field);
+  const cell = element("td", { "data-label": FIELD_LABELS[field] });
+  if (change) {
+    cell.append(element("label", { className: "pick" }, [changeCheckbox(model, change), valueNode(change.proposed)]));
+  } else if (detail && detail.state === "set") {
+    cell.append(element("span", { className: "is-set" }, [
+      valueNode(detail.current),
+      element("span", { className: "caption", text: "Already set" }),
+    ]));
+  } else if (detail && detail.state === "not_used") {
+    cell.append(element("span", { className: "caption", text: "Not used by Codex" }));
+  } else if (detail) {
+    cell.append(noDataNode(detail));
+  }
+  return cell;
+}
+
+function factsText(source) {
+  if (!source) return "";
+  const facts = [];
+  if (source.has_tool_call === true) facts.push("Tools: yes");
+  if (source.has_tool_call === false) facts.push("Tools: no");
+  if (source.output_tokens) facts.push("Max output: " + formatNumber(source.output_tokens));
+  return facts.join(SEPARATOR);
+}
+
+function reasoningLine(model) {
+  const detail = model.details.find((item) => item.field === REASONING_FIELD);
+  const change = model.changes.find((item) => item.field === REASONING_FIELD);
+  const label = element("span", { className: "field-label", text: FIELD_LABELS[REASONING_FIELD] });
+  const line = element("div", { className: "reason-line" });
+  if (change) {
+    line.append(element("label", { className: "pick" }, [changeCheckbox(model, change), label, valueNode(change.proposed)]));
+  } else {
+    line.classList.add("has-no-box");
+    line.append(label);
+    if (detail && detail.state === "set") {
+      if (Array.isArray(detail.current) && detail.current.length) line.append(valueNode(detail.current));
+      line.append(element("span", { className: "caption", text: "Already set" }));
+    } else if (detail && detail.state === "not_used") {
+      line.append(element("span", { className: "caption", text: "Not used" }));
+    } else if (detail) {
+      line.append(noDataNode(detail));
+    }
+  }
+  const facts = factsText(model.source);
+  if (facts) line.append(element("span", { className: "facts", text: facts }));
+  return line;
+}
+
+function sourceChips(model) {
+  const source = model.source;
+  if (!source) return [element("span", { className: "chip is-plain", text: "Not on models.dev" })];
+  const provider = source.provider_name || source.provider_id;
+  const chips = [];
+  if (source.match_kind === "same_host") {
+    chips.push(element("span", {
+      className: "chip",
+      title: "models.dev lists this model on the same host (" + provider + ").",
+    }, [element("span", { className: "dot" }), "Same host"]));
+  } else {
+    const prefix = source.match_kind === "model_maker" ? "Model maker: " : "Other host: ";
+    const listedAs = source.model_id.toLowerCase() === model.model_id.toLowerCase()
+      ? "" : " (listed as " + source.model_id + ")";
+    chips.push(element("span", {
+      className: "chip is-check",
+      title: "These values come from " + provider + listedAs + ", not from your provider. Check them first.",
+    }, [icon("alert"), prefix + provider]));
+  }
+  if (source.status) chips.push(element("span", { className: "chip is-plain", text: "Status: " + source.status }));
+  if (source.model_type) chips.push(element("span", { className: "chip is-plain", text: "Type: " + source.model_type }));
+  return chips;
+}
+
+function modelBody(model, keysPerEntry, isSelectable) {
+  const idText = keysPerEntry.get(entryKey(model)).size > 1 && model.location.key_index !== null
+    ? model.model_id + " (key " + (model.location.key_index + 1) + ")"
+    : model.model_id;
+  const modelCell = element("td", null, [
+    element("div", { className: "model-line" }, [
+      element("span", { className: "model-id", text: idText }),
+      ...sourceChips(model),
+    ]),
+  ]);
+  const mainCells = [modelCell, ...COLUMN_FIELDS.map((field) => detailCell(model, field))];
+  const reasonCells = [element("td", { colspan: String(COLUMN_FIELDS.length + 1) }, [reasoningLine(model)])];
+  if (isSelectable) {
+    const rowCheckbox = element("input", {
+      type: "checkbox",
+      className: "row-check",
+      "aria-label": "All changes for " + model.model_id,
+    });
+    rowCheckbox.addEventListener("change", () => {
+      const body = rowCheckbox.closest("tbody");
+      for (const checkbox of body.querySelectorAll("input[data-change-id]")) checkbox.checked = rowCheckbox.checked;
+      syncSelection();
+    });
+    mainCells.unshift(element("td", { className: "check-cell" }, [rowCheckbox]));
+    reasonCells.unshift(element("td"));
+  }
+  return element("tbody", { className: "model" }, [
+    element("tr", { className: "main-row" }, mainCells),
+    element("tr", { className: "reason-row" }, reasonCells),
+  ]);
+}
+
+function modelTable(models, keysPerEntry, isSelectable) {
+  const columnCount = COLUMN_FIELDS.length + 1 + (isSelectable ? 1 : 0);
+  const columns = [
+    element("col", { className: "column-model" }),
+    element("col", { className: "column-name" }),
+    element("col", { className: "column-context" }),
+    element("col"),
+  ];
+  const headings = ["Model", ...COLUMN_FIELDS.map((field) => FIELD_LABELS[field])]
+    .map((text) => element("th", { scope: "col", text }));
+  if (isSelectable) {
+    const selectAll = element("input", { type: "checkbox", id: "select-all", "aria-label": "Select all changes" });
+    selectAll.addEventListener("change", () => {
+      const checkboxes = changeCheckboxes();
+      const shouldTick = !checkboxes.every((checkbox) => checkbox.checked);
+      for (const checkbox of checkboxes) checkbox.checked = shouldTick;
+      syncSelection();
+    });
+    columns.unshift(element("col", { className: "check-cell" }));
+    headings.unshift(element("th", { className: "check-cell" }, [
+      selectAll,
+      element("span", { className: "narrow-label", text: "Select all" }),
+    ]));
+  }
+  const table = element("table", { className: isSelectable ? "models" : "models is-plain" }, [
+    element("colgroup", null, columns),
+    element("thead", null, [element("tr", null, headings)]),
+  ]);
+  for (const group of groupByEntry(models)) {
+    table.append(element("tbody", { className: "group-row" }, [
+      element("tr", null, [
+        element("th", { colspan: String(columnCount), scope: "colgroup" }, [
+          element("span", { className: "group-name", text: group.name }),
+          element("span", { className: "group-where", text: group.where }),
+        ]),
+      ]),
+    ]));
+    for (const model of group.models) table.append(modelBody(model, keysPerEntry, isSelectable));
+  }
+  return table;
+}
+
+function doneSection(models, keysPerEntry) {
+  const summary = element("summary", null, [
+    icon("chevron"),
+    plural(models.length, "model") + " with nothing to fill",
+    element("span", { text: "Their details are set, or models.dev has no data" }),
+  ]);
+  const section = element("details", { className: "card done" }, [summary]);
+  // The rows are built when the list is first opened.
+  section.addEventListener("toggle", () => {
+    if (section.open && !section.querySelector("table")) section.append(modelTable(models, keysPerEntry, false));
+  });
+  return section;
+}
+
+function stateBlock(title, text) {
+  return element("div", { className: "state" }, [
+    element("div", { className: "state-mark" }, [icon("check")]),
+    element("div", { className: "state-title", text: title }),
+    element("div", { className: "state-text", text }),
+  ]);
+}
+
+function renderList(preview, choices) {
+  const changesById = new Map();
+  const keysPerEntry = new Map();
+  for (const model of preview.models) {
+    for (const change of model.changes) changesById.set(change.id, change);
+    if (!keysPerEntry.has(entryKey(model))) keysPerEntry.set(entryKey(model), new Set());
+    keysPerEntry.get(entryKey(model)).add(model.location.key_index);
+  }
+  lastPreview = { etag: preview.etag, changesById };
+  renderCatalogStatus(preview.catalog);
+
+  const modelsToFill = preview.models.filter((model) => model.changes.length > 0);
+  const modelsDone = preview.models.filter((model) => model.changes.length === 0);
+  const parts = [];
+  if (preview.models.length === 0) {
+    parts.push(stateBlock("No models found",
+      "Add models to an OpenAI Compatible or Codex API entry, then open this page again."));
+  } else if (modelsToFill.length === 0) {
+    parts.push(stateBlock("Nothing to fill",
+      plural(preview.models.length, "model") + " checked against models.dev."));
+  } else {
+    parts.push(element("div", { className: "card" }, [modelTable(modelsToFill, keysPerEntry, true)]));
+  }
+  if (modelsDone.length) parts.push(doneSection(modelsDone, keysPerEntry));
+  content.replaceChildren(...parts);
+  document.getElementById("footnote").hidden = modelsToFill.length === 0;
+  if (choices) restoreChoices(choices);
+  syncSelection();
+}
+
+function changeCheckboxes() {
+  return [...content.querySelectorAll("input[data-change-id]")];
+}
+
+function setMixedState(checkbox, checkboxes) {
+  const tickedCount = checkboxes.filter((item) => item.checked).length;
+  checkbox.checked = checkboxes.length > 0 && tickedCount === checkboxes.length;
+  checkbox.indeterminate = tickedCount > 0 && tickedCount < checkboxes.length;
+}
+
+// Brings the row boxes, the "select all" box, the counts, the banner and the
+// Save button in line with the ticked changes.
+function syncSelection() {
+  const checkboxes = changeCheckboxes();
+  const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+  for (const rowCheckbox of content.querySelectorAll(".row-check")) {
+    const rowBoxes = [...rowCheckbox.closest("tbody").querySelectorAll("input[data-change-id]")];
+    setMixedState(rowCheckbox, rowBoxes);
+  }
+  const selectAll = document.getElementById("select-all");
+  if (selectAll) setMixedState(selectAll, checkboxes);
+
+  document.getElementById("selected-count").textContent = checkboxes.length
+    ? selectedCount + " of " + checkboxes.length + " selected"
+    : "";
+  saveButton.textContent = selectedCount ? "Save " + plural(selectedCount, "change") : "Save";
+  saveButton.disabled = isBusy || selectedCount === 0;
+
+  // "Check first" values come from the model maker or another host.
+  const changes = lastPreview ? [...lastPreview.changesById.values()] : [];
+  const checkFirst = changes.filter((change) => !change.is_selected_by_default);
+  const banner = document.getElementById("check-banner");
+  banner.hidden = checkFirst.length === 0 || checkboxes.length === 0;
+  if (!banner.hidden) {
+    const checkFirstIds = new Set(checkFirst.map((change) => change.id));
+    const tickedCheckFirst = checkboxes
+      .filter((checkbox) => checkbox.checked && checkFirstIds.has(checkbox.dataset.changeId)).length;
+    document.getElementById("check-text").textContent = plural(checkFirst.length, "value")
+      + (checkFirst.length === 1 ? " comes" : " come")
+      + " from the model maker or another host, not from your provider."
+      + " They stay off until you tick them.";
+    document.getElementById("check-count").textContent = "Ready " + (changes.length - checkFirst.length)
+      + SEPARATOR + "Check first " + checkFirst.length
+      + (tickedCheckFirst ? " (" + tickedCheckFirst + " ticked)" : "");
   }
 }
 
@@ -277,224 +878,14 @@ function currentChoices() {
   return choices;
 }
 
-// After a save, rows the user left unticked stay unticked, so a second
-// press of Save selected does not save them by accident.
+// After a reload, rows the user left unticked stay unticked, so a second
+// press of Save does not save them by accident.
 function restoreChoices(choices) {
   for (const checkbox of changeCheckboxes()) {
     const change = lastPreview.changesById.get(checkbox.dataset.changeId);
     const key = change ? choiceKey(change) : null;
     if (key && choices.has(key)) checkbox.checked = choices.get(key);
   }
-  updateSelectedCount();
-}
-
-async function runPreview(shouldRefresh, keepMessage, choices) {
-  if (isBusy) return;
-  setBusy(true);
-  if (!keepMessage) {
-    showMessage("info", shouldRefresh
-      ? "Downloading models.dev data (about 7 MB)..."
-      : "Loading the preview. The first run downloads about 7 MB from models.dev...");
-  }
-  try {
-    const route = "preview?cpa_port=" + cpaPort + (shouldRefresh ? "&refresh=1" : "");
-    const preview = await callRoute("GET", route);
-    renderPreview(preview);
-    if (choices) restoreChoices(choices);
-    if (!keepMessage) showMessage("", "");
-  } catch (error) {
-    handleError(error, "Could not load the preview");
-  } finally {
-    setBusy(false);
-  }
-}
-
-function renderCatalogStatus(catalog) {
-  const downloadedAt = new Date(catalog.downloaded_at_unix_seconds * 1000);
-  const parts = [
-    "models.dev data from " + downloadedAt.toLocaleString()
-      + " (" + catalog.model_count.toLocaleString("en-US") + " models).",
-  ];
-  if (catalog.download_error) {
-    parts.push("The download failed (" + catalog.download_error + "), so the saved copy is used.");
-  } else if (catalog.is_old) {
-    parts.push("This copy is more than a day old.");
-  }
-  if (catalog.save_error) {
-    parts.push("Could not keep a copy on disk: " + catalog.save_error + ".");
-  }
-  const status = document.getElementById("catalog-status");
-  status.textContent = parts.join(" ");
-  status.className = catalog.download_error || catalog.is_old ? "warning-text" : "muted";
-}
-
-function groupByEntry(models) {
-  const groups = new Map();
-  for (const model of models) {
-    const location = model.location;
-    const groupKey = location.section + "/" + location.entry_index;
-    if (!groups.has(groupKey)) {
-      const sectionLabel = SECTION_LABELS[location.section] || location.section;
-      const hostText = model.entry_host ? ", " + model.entry_host : "";
-      const entryName = model.entry_name || "entry " + (location.entry_index + 1);
-      groups.set(groupKey, {
-        title: entryName + " (" + sectionLabel + hostText + ")",
-        models: [],
-        keyIndexes: new Set(),
-      });
-    }
-    const group = groups.get(groupKey);
-    group.models.push(model);
-    group.keyIndexes.add(location.key_index);
-  }
-  return [...groups.values()];
-}
-
-function modelLabel(model, group) {
-  const keyIndex = model.location.key_index;
-  if (keyIndex !== null && group.keyIndexes.size > 1) {
-    return model.model_id + " (key " + (keyIndex + 1) + ")";
-  }
-  return model.model_id;
-}
-
-function sourceCell(model) {
-  const source = model.source;
-  const isSameHost = source.match_kind === "same_host";
-  const tag = element("span", {
-    className: "tag " + (isSameHost ? "same-host" : "check"),
-    text: MATCH_LABELS[source.match_kind] || source.match_kind,
-  });
-  const providerText = source.provider_name || source.provider_id;
-  const lines = [element("div", null, [providerText, tag])];
-  if (source.model_id.toLowerCase() !== model.model_id.toLowerCase()) {
-    lines.push(element("div", { className: "info", text: "as " + source.model_id }));
-  }
-  const facts = [];
-  if (source.has_tool_call === true) facts.push("Tools: yes");
-  if (source.has_tool_call === false) facts.push("Tools: no");
-  if (source.output_tokens) facts.push("Max output: " + source.output_tokens.toLocaleString("en-US"));
-  if (source.is_thinking_toggle_only) facts.push("Thinking: on or off only");
-  if (source.status) facts.push("Status: " + source.status);
-  if (source.model_type) facts.push("Type: " + source.model_type);
-  if (facts.length) lines.push(element("div", { className: "info", text: facts.join(". ") + "." }));
-  return element("td", null, lines);
-}
-
-function changeRow(model, change, group) {
-  const fieldLabel = FIELD_LABELS[change.field] || change.field;
-  const checkbox = element("input");
-  checkbox.type = "checkbox";
-  checkbox.checked = change.is_selected_by_default;
-  checkbox.dataset.changeId = change.id;
-  checkbox.setAttribute("aria-label", "Save " + fieldLabel + " for " + model.model_id);
-  checkbox.addEventListener("change", updateSelectedCount);
-  return element("tr", null, [
-    element("td", null, [checkbox]),
-    element("td", { className: "model", text: modelLabel(model, group) }),
-    element("td", { text: fieldLabel }),
-    element("td", { className: "value muted", text: formatValue(change.current) }),
-    element("td", { className: "value", text: formatValue(change.proposed) }),
-    sourceCell(model),
-  ]);
-}
-
-function changeTable(groups, includeChange) {
-  const body = element("tbody");
-  let rowCount = 0;
-  for (const group of groups) {
-    const groupRows = [];
-    for (const model of group.models) {
-      for (const change of model.changes.filter(includeChange)) {
-        groupRows.push(changeRow(model, change, group));
-      }
-    }
-    if (groupRows.length === 0) continue;
-    const groupHeader = element("th", { className: "group", text: group.title });
-    groupHeader.colSpan = 6;
-    body.append(element("tr", null, [groupHeader]), ...groupRows);
-    rowCount += groupRows.length;
-  }
-  if (rowCount === 0) return null;
-  const headings = ["Save", "Model", "Field", "Now", "New", "Source"];
-  const head = element("thead", null, [
-    element("tr", null, headings.map((text) => element("th", { text }))),
-  ]);
-  return element("div", { className: "table-wrap" }, [element("table", null, [head, body])]);
-}
-
-function unchangedList(groups) {
-  const items = [];
-  for (const group of groups) {
-    for (const model of group.models) {
-      if (model.changes.length) continue;
-      const reason = model.source
-        ? "nothing empty that models.dev can fill"
-        : "not found on models.dev";
-      items.push(element("li", { text: modelLabel(model, group) + " in " + group.title + ": " + reason }));
-    }
-  }
-  if (items.length === 0) return null;
-  const summary = element("summary", { text: "Models with nothing to fill (" + items.length + ")" });
-  return element("details", null, [summary, element("ul", null, items)]);
-}
-
-function renderPreview(preview) {
-  const changesById = new Map();
-  for (const model of preview.models) {
-    for (const change of model.changes) changesById.set(change.id, change);
-  }
-  lastPreview = { etag: preview.etag, changesById };
-  renderCatalogStatus(preview.catalog);
-
-  const groups = groupByEntry(preview.models);
-  const detailTable = changeTable(groups, (change) => change.field !== THINKING_FIELD);
-  const thinkingTable = changeTable(groups, (change) => change.field === THINKING_FIELD);
-  const hasUntickedRows = [...changesById.values()].some((change) => !change.is_selected_by_default);
-
-  const parts = [];
-  if (changesById.size === 0) {
-    parts.push(element("p", { text: "Nothing to fill. Every model either has its fields set or is not on models.dev." }));
-  }
-  if (hasUntickedRows) {
-    parts.push(element("p", {
-      className: "warning-text",
-      text: "Rows from the model maker or another host are not ticked. Their values can differ from your provider's, so check them first.",
-    }));
-  }
-  if (detailTable) {
-    parts.push(element("h2", { text: "Model details" }), detailTable);
-  }
-  if (thinkingTable) {
-    parts.push(
-      element("h2", { text: "Thinking levels" }),
-      element("p", {
-        className: "muted",
-        text: "CPA limits thinking requests for a model to the levels saved here. \"none\" means thinking can be turned off.",
-      }),
-      thinkingTable,
-    );
-  }
-  parts.push(unchangedList(groups));
-  document.getElementById("results").replaceChildren(...parts.filter(Boolean));
-  document.getElementById("save-bar").hidden = changesById.size === 0;
-  updateSelectedCount();
-}
-
-function changeCheckboxes() {
-  return [...document.querySelectorAll("input[data-change-id]")];
-}
-
-function updateSelectedCount() {
-  const checkboxes = changeCheckboxes();
-  const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
-  document.getElementById("selected-count").textContent =
-    selectedCount + " of " + checkboxes.length + " changes selected";
-}
-
-function setAllCheckboxes(isChecked) {
-  for (const checkbox of changeCheckboxes()) checkbox.checked = isChecked;
-  updateSelectedCount();
 }
 
 async function saveSelected() {
@@ -505,13 +896,9 @@ async function saveSelected() {
     const change = lastPreview.changesById.get(checkbox.dataset.changeId);
     if (change) pickedChanges.push({ id: change.id, proposed: change.proposed });
   }
-  if (pickedChanges.length === 0) {
-    showMessage("info", "Nothing is selected, so nothing was saved.");
-    return;
-  }
+  if (pickedChanges.length === 0) return;
   const choicesBeforeSave = currentChoices();
   setBusy(true);
-  showMessage("info", "Saving...");
   let result;
   try {
     result = await callRoute("POST", "apply", {
@@ -521,44 +908,66 @@ async function saveSelected() {
     });
   } catch (error) {
     setBusy(false);
-    if (error.status === 0) {
-      showMessage("error", "Could not save: " + error.message
-        + ". CPA also closes the connection when it does not accept the management key."
-        + " Press Preview to see what is saved now.");
-    } else {
-      handleError(error, "Could not save");
-    }
+    reportSaveError(error, choicesBeforeSave);
     return;
   }
   setBusy(false);
-  const changeWord = result.applied_count === 1 ? " change" : " changes";
-  showMessage("ok", result.is_written
-    ? "Saved " + result.applied_count + changeWord + ". CPA reloads its config in the background."
+  showNotice("ok", result.is_written
+    ? "Saved " + plural(result.applied_count, "change") + ". CPA reloads its config in the background."
     : "Nothing needed saving.");
-  await runPreview(false, true, choicesBeforeSave);
+  await loadList({ choices: choicesBeforeSave, keepNotice: true });
 }
 
-document.getElementById("preview-button").addEventListener("click", () => runPreview(false, false));
-document.getElementById("refresh-button").addEventListener("click", () => runPreview(true, false));
-document.getElementById("save-button").addEventListener("click", saveSelected);
-document.getElementById("tick-all-button").addEventListener("click", () => setAllCheckboxes(true));
-document.getElementById("untick-all-button").addEventListener("click", () => setAllCheckboxes(false));
+function reportSaveError(error, choices) {
+  if (error.status === 409) {
+    showNotice("warning", "The config or the models.dev data changed after this list was made."
+      + " Nothing was saved. The list below is the current one.");
+    // One reload, with the user's ticks kept. It does not save again.
+    loadList({ choices, keepNotice: true });
+  } else if (error.status === 0) {
+    showNotice("error", "Could not save: " + error.message
+      + ". CPA also closes the connection when it does not accept the management key.", {
+      label: "Reload the list",
+      run: () => loadList({ choices: currentChoices() }),
+    });
+  } else if (error.status === 401) {
+    showKeyForm();
+    showNotice("error", "Could not save: CPA did not accept the management key. Type it below.");
+  } else if (error.status === 403) {
+    showNotice("error", "Could not save: CPA refused the request: " + error.message
+      + ". After 5 wrong keys, CPA blocks your address for 30 minutes.");
+  } else {
+    showNotice("error", "Could not save: " + error.message + ".");
+  }
+}
+
+// The table headings stay under the page header while the list scrolls.
+function trackHeaderHeight() {
+  const head = document.getElementById("head");
+  const update = () => {
+    document.documentElement.style.setProperty("--head-height", head.offsetHeight + "px");
+    head.classList.toggle("is-scrolled", window.scrollY > 0);
+  };
+  if (typeof ResizeObserver === "function") new ResizeObserver(update).observe(head);
+  window.addEventListener("scroll", update, { passive: true });
+  update();
+}
+
+saveButton.addEventListener("click", saveSelected);
+updateButton.addEventListener("click", () => loadList({ shouldRefresh: true, choices: currentChoices() }));
 document.getElementById("key-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const input = document.getElementById("key-input");
-  manualKey = input.value.trim();
+  const typedKey = input.value.trim();
   input.value = "";
-  if (!manualKey) return;
-  document.getElementById("key-status").textContent = "Using the key you typed. It is kept in this page only.";
-  document.getElementById("key-form").hidden = true;
-  runPreview(false, false);
+  if (!typedKey) return;
+  manualKey = typedKey;
+  loadList();
 });
 
-if (storedManagementKey()) {
-  document.getElementById("key-status").textContent = "Using the management key from your CPA login.";
-} else {
-  showKeyForm("No saved management key was found. Type it below.");
-}
+trackHeaderHeight();
+// The list loads once when the page opens.
+loadList();
 </script>
 </body>
 </html>

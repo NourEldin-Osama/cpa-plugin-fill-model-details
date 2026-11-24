@@ -161,5 +161,5 @@ built on.
 
 MIT. See `LICENSE`. The models.dev data and pi-web are also MIT licensed.
 
-The page's icons are from [Lucide](https://lucide.dev) (ISC License). Their
-licence notice is in `src/page.html`.
+The page's icons are from [Lucide](https://lucide.dev) (ISC License). The
+licence text is in `third-party-licenses/lucide.txt`.

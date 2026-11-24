@@ -144,7 +144,18 @@ cargo test
 cargo build --release
 ```
 
-The release build is `target/release/fill_model_details.dll`.
+The release build is `target/release/fill_model_details.dll`. On Windows the
+C runtime is built into the file (see `.cargo/config.toml`), so it needs no
+Microsoft Visual C++ runtime.
+
+To make the zip for a release, run:
+
+```sh
+uv run --no-project python -I tools/make_release.py
+```
+
+It builds the DLL again without the folder names of your machine inside, adds
+the licences of the libraries in the DLL, and writes the zip to `target/dist`.
 
 The tests use a small cut of the models.dev data,
 `tests/fixtures/models-dev-sample.json`. To make it again from a fresh
@@ -163,3 +174,6 @@ MIT. See `LICENSE`. The models.dev data and pi-web are also MIT licensed.
 
 The page's icons are from [Lucide](https://lucide.dev) (ISC License). The
 licence text is in `third-party-licenses/lucide.txt`.
+
+The release zip also holds the licences of the Rust libraries that are built
+into the DLL, in its `third-party-licenses` folder.

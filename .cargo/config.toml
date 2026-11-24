@@ -1,0 +1,4 @@
+# Build the C runtime into the plugin on Windows. The DLL then loads on a PC
+# that has no Microsoft Visual C++ runtime installed.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

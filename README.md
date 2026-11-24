@@ -58,11 +58,13 @@ model.
 Tested with CPA core v8.0.80 (in the EasyCLIProxyAPI desktop app v0.3.117) on
 Windows x64.
 
-1. Build the plugin (see below).
-2. Copy `fill_model_details.dll` into your CPA plugins folder and rename it to
-   `fill-model-details.dll`. The file name sets the plugin id. With the
-   default setting (`plugins.dir: plugins`), the folder on Windows x64 is
-   `plugins\windows\amd64` in CPA's folder.
+1. Get `fill-model-details.dll`. Download the zip from the
+   [Releases page](https://github.com/NourEldin-Osama/cpa-plugin-fill-model-details/releases)
+   and unpack it. Or build the plugin yourself (see below) and rename
+   `fill_model_details.dll` to `fill-model-details.dll`.
+2. Copy the file into your CPA plugins folder. Keep the file name: it sets
+   the plugin id. With the default setting (`plugins.dir: plugins`), the
+   folder on Windows x64 is `plugins\windows\amd64` in CPA's folder.
 3. Turn the plugin on. In EasyCLIProxyAPI, use the switch on the **Plugins**
    screen: CPA then loads the plugin at once, without a restart. Without the
    app, set it in CPA's `config.yaml`, and restart CPA if the plugin does not
@@ -144,7 +146,18 @@ cargo test
 cargo build --release
 ```
 
-The release build is `target/release/fill_model_details.dll`.
+The release build is `target/release/fill_model_details.dll`. On Windows the
+C runtime is built into the file (see `.cargo/config.toml`), so it needs no
+Microsoft Visual C++ runtime.
+
+To make the zip for a release, run:
+
+```sh
+uv run --no-project python -I tools/make_release.py
+```
+
+It builds the DLL again without the folder names of your machine inside, adds
+the licences of the libraries in the DLL, and writes the zip to `target/dist`.
 
 The tests use a small cut of the models.dev data,
 `tests/fixtures/models-dev-sample.json`. To make it again from a fresh
@@ -161,5 +174,8 @@ built on.
 
 MIT. See `LICENSE`. The models.dev data and pi-web are also MIT licensed.
 
-The page's icons are from [Lucide](https://lucide.dev) (ISC License). Their
-licence notice is in `src/page.html`.
+The page's icons are from [Lucide](https://lucide.dev) (ISC License). The
+licence text is in `third-party-licenses/lucide.txt`.
+
+The release zip also holds the licences of the Rust libraries that are built
+into the DLL, in its `third-party-licenses` folder.

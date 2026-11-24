@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 use crate::cache::{self, CatalogStatus, Refresh};
 use crate::error::PluginError;
-use crate::fill::{self, ModelPreview, RequestedChange};
+use crate::fill::{self, ModelPreview, RequestedChange, RequestedReset};
 use crate::loopback;
 
 const PLUGIN_SEGMENT: &str = "/fill-model-details/";
@@ -33,7 +33,7 @@ pub fn registration() -> Value {
             {
                 "Method": "POST",
                 "Path": "/fill-model-details/apply",
-                "Description": "Save the picked model fields"
+                "Description": "Save the picked model fields and resets"
             }
         ],
         "resources": [
@@ -73,12 +73,17 @@ struct ApplyRequest {
     etag: String,
     #[serde(default)]
     changes: Vec<RequestedChange>,
+    #[serde(default)]
+    resets: Vec<RequestedReset>,
 }
 
 #[derive(Serialize)]
 struct ApplyReply {
     is_written: bool,
+    /// Fields filled.
     applied_count: usize,
+    /// Models whose saved details were removed.
+    reset_count: usize,
 }
 
 fn preview(request: &Value) -> Result<Value, PluginError> {
@@ -100,8 +105,8 @@ fn preview(request: &Value) -> Result<Value, PluginError> {
     Ok(serde_json::to_value(preview_reply)?)
 }
 
-/// Saves the picked changes with one write, only if the config and the
-/// models.dev data are still the ones the preview showed.
+/// Saves the picked changes and resets with one write, only if the config and
+/// the models.dev data are still the ones the preview showed.
 fn apply(request: &Value) -> Result<Value, PluginError> {
     let body = request_body_json(request)?;
     let apply_request: ApplyRequest = serde_json::from_value(body.clone())
@@ -109,8 +114,9 @@ fn apply(request: &Value) -> Result<Value, PluginError> {
     let nothing_written = ApplyReply {
         is_written: false,
         applied_count: 0,
+        reset_count: 0,
     };
-    if apply_request.changes.is_empty() {
+    if apply_request.changes.is_empty() && apply_request.resets.is_empty() {
         return Ok(serde_json::to_value(nothing_written)?);
     }
     if apply_request.etag.trim().is_empty() {
@@ -138,8 +144,10 @@ fn apply(request: &Value) -> Result<Value, PluginError> {
     }
     let previews = fill::plan(&config.api_keys, &loaded.catalog);
     let picked_changes = fill::select(&previews, &apply_request.changes)?;
+    let picked_resets = fill::select_resets(&previews, &apply_request.resets)?;
     let applied_count = fill::apply(&mut config.api_keys, &picked_changes);
-    if applied_count == 0 {
+    let reset_count = fill::apply_resets(&mut config.api_keys, &picked_resets);
+    if applied_count == 0 && reset_count == 0 {
         return Ok(serde_json::to_value(nothing_written)?);
     }
 
@@ -157,6 +165,7 @@ fn apply(request: &Value) -> Result<Value, PluginError> {
         200 | 204 => Ok(serde_json::to_value(ApplyReply {
             is_written: true,
             applied_count,
+            reset_count,
         })?),
         412 => Err(config_changed_error()),
         401 | 403 => Err(key_rejected_error()),
@@ -420,6 +429,9 @@ mod tests {
         // No port and no key are needed, because nothing is read or written.
         let request = request_with(json!({}), &json!({ "etag": "\"x\"", "changes": [] }));
         let result = apply(&request).expect("nothing to do is not an error");
-        assert_eq!(result, json!({ "is_written": false, "applied_count": 0 }));
+        assert_eq!(
+            result,
+            json!({ "is_written": false, "applied_count": 0, "reset_count": 0 })
+        );
     }
 }

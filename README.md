@@ -5,7 +5,8 @@ config with data from [models.dev](https://models.dev): display name, context
 window, input modalities (text, image), and reasoning levels.
 
 Nothing changes until you press Save. The page lists what it can fill, and
-you pick which values to save.
+you pick which values to save. It can also reset a model, so that CPA uses
+its own defaults for it again.
 
 The idea comes from the "Fill model details" button in
 [pi-web](https://github.com/agegr/pi-web).
@@ -25,8 +26,8 @@ API-key entries. For each model it fills a field only when the field is empty:
 The names on the page are the same as in the app's own model form.
 
 - `codex` models have no input modalities field, so they never get one.
-- Fields that already have a value are never changed. All other keys in your
-  config stay as they are.
+- Filling never changes a field that already has a value. All other keys in
+  your config stay as they are.
 - Tool support, max output tokens, model status, and model type are shown on
   the page as information. CPA config has no place to store them.
 
@@ -86,6 +87,22 @@ Windows x64.
 Each model shows its four details. A detail is either offered with a tick
 box, marked "Already set", or has no value on models.dev. Models with nothing
 to fill are in a folded list under the table.
+
+### Reset a model
+
+Press **Reset** beside a model to give up its saved details. The values are
+crossed out and marked "Will be cleared". Nothing changes until you press
+**Save**, and a second press on **Reset** takes the mark off.
+
+Save then removes the model's display name, context window, input modalities
+and reasoning levels from the config, so CPA uses its own defaults for that
+model again. Every other setting of the model stays.
+
+- A reset also removes values you typed by hand. The plugin cannot bring
+  those back.
+- After a reset, the page offers the models.dev values for that model again.
+  They stay unticked while the page is open. When you open the page again,
+  values from the same host are ticked by default, as usual.
 
 The page uses the management key from your CPA login. If it finds none, or
 CPA does not accept it, the page asks for the key. A typed key stays in the

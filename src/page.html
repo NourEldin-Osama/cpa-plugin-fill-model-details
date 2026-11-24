@@ -184,6 +184,24 @@
   .field-label { font-size: 12.5px; color: var(--muted); white-space: nowrap; font-weight: 400; }
   .facts { margin-left: auto; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 
+  .reset-button {
+    display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
+    border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--muted);
+    font: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer;
+    transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .reset-button .icon { width: 12px; height: 12px; }
+  .reset-button:hover { background: var(--button-hover); color: var(--text); }
+  .reset-button[aria-pressed="true"] {
+    background: var(--amber-background); border-color: var(--amber-line); color: var(--amber-text);
+  }
+  /* A model marked for reset: its saved values are crossed out until Save. */
+  .clear-caption { display: none; color: var(--amber-text); }
+  .model.is-resetting [data-clears] .value,
+  .model.is-resetting [data-clears] .tag { text-decoration: line-through; }
+  .model.is-resetting [data-clears] .keep-caption { display: none; }
+  .model.is-resetting [data-clears] .clear-caption { display: inline; }
+
   .done { margin-top: 12px; }
   .done summary {
     display: flex; align-items: center; gap: 8px; padding: 10px 16px; cursor: pointer;
@@ -244,7 +262,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .spin { animation: none; }
-    .button, .done summary .icon { transition: none; }
+    .button, .reset-button, .done summary .icon { transition: none; }
   }
 </style>
 </head>
@@ -263,6 +281,7 @@
   <symbol id="icon-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
   <symbol id="icon-error" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></symbol>
   <symbol id="icon-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+  <symbol id="icon-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
 </svg>
 
 <main>
@@ -343,9 +362,16 @@ const NO_DATA_TITLES = {
 const KEY_NOTE = "The key stays in this page only. It is not saved. "
   + "After 5 wrong keys, CPA blocks your address for 30 minutes.";
 
+const RESET_TITLE = "Clear this model's saved details when you press Save, so CPA uses its defaults.";
+const RESET_MARKED_TITLE = "Marked for reset. Press again to keep the details.";
+
 let manualKey = "";
 let lastPreview = null;
 let isBusy = false;
+let isDoneListOpen = false;
+// Models reset since the page opened. Their values are offered again, but
+// not ticked, so the next Save does not fill them back in.
+const resetThisSession = new Set();
 
 const content = document.getElementById("content");
 const saveButton = document.getElementById("save-button");
@@ -570,6 +596,10 @@ function entryKey(model) {
   return model.location.section + "/" + model.location.entry_index;
 }
 
+function modelKey(model) {
+  return entryKey(model) + "/" + model.location.key_index + "/" + model.model_id;
+}
+
 function groupByEntry(models) {
   const groups = new Map();
   for (const model of models) {
@@ -602,7 +632,7 @@ function changeCheckbox(model, change) {
     "data-change-id": change.id,
     "aria-label": "Save " + FIELD_LABELS[change.field] + " for " + model.model_id,
   });
-  checkbox.checked = change.is_selected_by_default;
+  checkbox.checked = change.is_selected_by_default && !resetThisSession.has(modelKey(model));
   checkbox.addEventListener("change", syncSelection);
   return checkbox;
 }
@@ -622,9 +652,9 @@ function detailCell(model, field) {
   if (change) {
     cell.append(element("label", { className: "pick" }, [changeCheckbox(model, change), valueNode(change.proposed)]));
   } else if (detail && detail.state === "set") {
-    cell.append(element("span", { className: "is-set" }, [
+    cell.append(element("span", { className: "is-set", "data-clears": clearsMark(model, field) }, [
       valueNode(detail.current),
-      element("span", { className: "caption", text: "Already set" }),
+      ...setCaptions(),
     ]));
   } else if (detail && detail.state === "not_used") {
     cell.append(element("span", { className: "caption", text: "Not used by Codex" }));
@@ -632,6 +662,18 @@ function detailCell(model, field) {
     cell.append(noDataNode(detail));
   }
   return cell;
+}
+
+// An empty attribute value when a reset removes this field, else nothing.
+function clearsMark(model, field) {
+  return model.reset && model.reset.fields.includes(field) ? "" : null;
+}
+
+function setCaptions() {
+  return [
+    element("span", { className: "caption keep-caption", text: "Already set" }),
+    element("span", { className: "caption clear-caption", text: "Will be cleared" }),
+  ];
 }
 
 function factsText(source) {
@@ -654,8 +696,9 @@ function reasoningLine(model) {
     line.classList.add("has-no-box");
     line.append(label);
     if (detail && detail.state === "set") {
+      if (clearsMark(model, REASONING_FIELD) !== null) line.setAttribute("data-clears", "");
       if (Array.isArray(detail.current) && detail.current.length) line.append(valueNode(detail.current));
-      line.append(element("span", { className: "caption", text: "Already set" }));
+      line.append(...setCaptions());
     } else if (detail && detail.state === "not_used") {
       line.append(element("span", { className: "caption", text: "Not used" }));
     } else if (detail) {
@@ -691,6 +734,42 @@ function sourceChips(model) {
   return chips;
 }
 
+function resetButton(model) {
+  const button = element("button", {
+    className: "reset-button",
+    type: "button",
+    "aria-pressed": "false",
+    "data-reset-id": model.reset.id,
+    title: RESET_TITLE,
+  }, [icon("reset"), "Reset"]);
+  button.addEventListener("click", () => {
+    setResetMark(button.closest("tbody"), button.getAttribute("aria-pressed") !== "true");
+    syncSelection();
+  });
+  return button;
+}
+
+// A model marked for reset gets no fills in the same save.
+function setResetMark(body, isMarked) {
+  const button = body.querySelector(".reset-button");
+  body.classList.toggle("is-resetting", isMarked);
+  button.setAttribute("aria-pressed", isMarked ? "true" : "false");
+  button.title = isMarked ? RESET_MARKED_TITLE : RESET_TITLE;
+  // Taking the mark off brings back the ticks the row had before.
+  for (const checkbox of body.querySelectorAll("input[data-change-id]")) {
+    if (isMarked) {
+      checkbox.dataset.tickedBeforeMark = checkbox.checked ? "yes" : "no";
+      checkbox.checked = false;
+    } else if (checkbox.dataset.tickedBeforeMark) {
+      checkbox.checked = checkbox.dataset.tickedBeforeMark === "yes";
+      delete checkbox.dataset.tickedBeforeMark;
+    }
+    checkbox.disabled = isMarked;
+  }
+  const rowCheckbox = body.querySelector(".row-check");
+  if (rowCheckbox) rowCheckbox.disabled = isMarked;
+}
+
 function modelBody(model, keysPerEntry, isSelectable) {
   const idText = keysPerEntry.get(entryKey(model)).size > 1 && model.location.key_index !== null
     ? model.model_id + " (key " + (model.location.key_index + 1) + ")"
@@ -699,6 +778,7 @@ function modelBody(model, keysPerEntry, isSelectable) {
     element("div", { className: "model-line" }, [
       element("span", { className: "model-id", text: idText }),
       ...sourceChips(model),
+      model.reset ? resetButton(model) : null,
     ]),
   ]);
   const mainCells = [modelCell, ...COLUMN_FIELDS.map((field) => detailCell(model, field))];
@@ -736,7 +816,7 @@ function modelTable(models, keysPerEntry, isSelectable) {
   if (isSelectable) {
     const selectAll = element("input", { type: "checkbox", id: "select-all", "aria-label": "Select all changes" });
     selectAll.addEventListener("change", () => {
-      const checkboxes = changeCheckboxes();
+      const checkboxes = changeCheckboxes().filter((checkbox) => !checkbox.disabled);
       const shouldTick = !checkboxes.every((checkbox) => checkbox.checked);
       for (const checkbox of checkboxes) checkbox.checked = shouldTick;
       syncSelection();
@@ -765,7 +845,7 @@ function modelTable(models, keysPerEntry, isSelectable) {
   return table;
 }
 
-function doneSection(models, keysPerEntry) {
+function doneSection(models, keysPerEntry, shouldOpen) {
   const summary = element("summary", null, [
     icon("chevron"),
     plural(models.length, "model") + " with nothing to fill",
@@ -773,9 +853,17 @@ function doneSection(models, keysPerEntry) {
   ]);
   const section = element("details", { className: "card done" }, [summary]);
   // The rows are built when the list is first opened.
+  const buildRows = () => {
+    if (!section.querySelector("table")) section.append(modelTable(models, keysPerEntry, false));
+  };
   section.addEventListener("toggle", () => {
-    if (section.open && !section.querySelector("table")) section.append(modelTable(models, keysPerEntry, false));
+    isDoneListOpen = section.open;
+    if (section.open) buildRows();
   });
+  if (shouldOpen) {
+    section.open = true;
+    buildRows();
+  }
   return section;
 }
 
@@ -789,13 +877,17 @@ function stateBlock(title, text) {
 
 function renderList(preview, choices) {
   const changesById = new Map();
+  const resetsById = new Map();
   const keysPerEntry = new Map();
   for (const model of preview.models) {
     for (const change of model.changes) changesById.set(change.id, change);
+    if (model.reset) {
+      resetsById.set(model.reset.id, { id: model.reset.id, fields: model.reset.fields, modelKey: modelKey(model) });
+    }
     if (!keysPerEntry.has(entryKey(model))) keysPerEntry.set(entryKey(model), new Set());
     keysPerEntry.get(entryKey(model)).add(model.location.key_index);
   }
-  lastPreview = { etag: preview.etag, changesById };
+  lastPreview = { etag: preview.etag, changesById, resetsById };
   renderCatalogStatus(preview.catalog);
 
   const modelsToFill = preview.models.filter((model) => model.changes.length > 0);
@@ -810,7 +902,12 @@ function renderList(preview, choices) {
   } else {
     parts.push(element("div", { className: "card" }, [modelTable(modelsToFill, keysPerEntry, true)]));
   }
-  if (modelsDone.length) parts.push(doneSection(modelsDone, keysPerEntry));
+  if (modelsDone.length) {
+    // The folded list opens again when it was open, or when it holds a model marked for reset.
+    const hasMarkedModel = Boolean(choices)
+      && modelsDone.some((model) => model.reset && choices.resets.has(model.reset.id));
+    parts.push(doneSection(modelsDone, keysPerEntry, isDoneListOpen || hasMarkedModel));
+  }
   content.replaceChildren(...parts);
   document.getElementById("footnote").hidden = modelsToFill.length === 0;
   if (choices) restoreChoices(choices);
@@ -829,21 +926,33 @@ function setMixedState(checkbox, checkboxes) {
 
 // Brings the row boxes, the "select all" box, the counts, the banner and the
 // Save button in line with the ticked changes.
+function pendingResets() {
+  if (!lastPreview) return [];
+  return [...content.querySelectorAll("tbody.is-resetting .reset-button")]
+    .map((button) => lastPreview.resetsById.get(button.dataset.resetId))
+    .filter(Boolean);
+}
+
 function syncSelection() {
   const checkboxes = changeCheckboxes();
   const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+  const resets = pendingResets();
+  const clearedCount = resets.reduce((total, reset) => total + reset.fields.length, 0);
   for (const rowCheckbox of content.querySelectorAll(".row-check")) {
     const rowBoxes = [...rowCheckbox.closest("tbody").querySelectorAll("input[data-change-id]")];
     setMixedState(rowCheckbox, rowBoxes);
   }
   const selectAll = document.getElementById("select-all");
-  if (selectAll) setMixedState(selectAll, checkboxes);
+  if (selectAll) setMixedState(selectAll, checkboxes.filter((checkbox) => !checkbox.disabled));
 
-  document.getElementById("selected-count").textContent = checkboxes.length
-    ? selectedCount + " of " + checkboxes.length + " selected"
-    : "";
-  saveButton.textContent = selectedCount ? "Save " + plural(selectedCount, "change") : "Save";
-  saveButton.disabled = isBusy || selectedCount === 0;
+  const countParts = [];
+  if (checkboxes.length) countParts.push(selectedCount + " of " + checkboxes.length + " selected");
+  if (resets.length) countParts.push(plural(resets.length, "model") + " to reset");
+  document.getElementById("selected-count").textContent = countParts.join(SEPARATOR);
+  // A cleared field counts as a change, like a filled one.
+  const changeCount = selectedCount + clearedCount;
+  saveButton.textContent = changeCount ? "Save " + plural(changeCount, "change") : "Save";
+  saveButton.disabled = isBusy || changeCount === 0;
 
   // "Check first" values come from the model maker or another host.
   const changes = lastPreview ? [...lastPreview.changesById.values()] : [];
@@ -868,24 +977,40 @@ function choiceKey(change) {
   return change.id + " " + JSON.stringify(change.proposed);
 }
 
+// The user's ticks and reset marks, to put back after the list reloads.
 function currentChoices() {
-  const choices = new Map();
-  if (!lastPreview) return choices;
-  for (const checkbox of changeCheckboxes()) {
-    const change = lastPreview.changesById.get(checkbox.dataset.changeId);
-    if (change) choices.set(choiceKey(change), checkbox.checked);
+  const ticks = new Map();
+  const resets = new Set(pendingResets().map((reset) => reset.id));
+  if (lastPreview) {
+    for (const checkbox of changeCheckboxes()) {
+      const change = lastPreview.changesById.get(checkbox.dataset.changeId);
+      if (change && !checkbox.disabled) ticks.set(choiceKey(change), checkbox.checked);
+    }
   }
-  return choices;
+  return { ticks, resets };
 }
 
 // After a reload, rows the user left unticked stay unticked, so a second
 // press of Save does not save them by accident.
 function restoreChoices(choices) {
+  for (const button of content.querySelectorAll(".reset-button")) {
+    if (choices.resets.has(button.dataset.resetId)) setResetMark(button.closest("tbody"), true);
+  }
   for (const checkbox of changeCheckboxes()) {
+    if (checkbox.disabled) continue;
     const change = lastPreview.changesById.get(checkbox.dataset.changeId);
     const key = change ? choiceKey(change) : null;
-    if (key && choices.has(key)) checkbox.checked = choices.get(key);
+    if (key && choices.ticks.has(key)) checkbox.checked = choices.ticks.get(key);
   }
+}
+
+function savedText(result) {
+  if (!result.is_written) return "Nothing needed saving.";
+  const parts = [];
+  if (result.applied_count) parts.push("saved " + plural(result.applied_count, "change"));
+  if (result.reset_count) parts.push("reset " + plural(result.reset_count, "model"));
+  const sentence = parts.join(" and ");
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1) + ". CPA reloads its config in the background.";
 }
 
 async function saveSelected() {
@@ -896,7 +1021,8 @@ async function saveSelected() {
     const change = lastPreview.changesById.get(checkbox.dataset.changeId);
     if (change) pickedChanges.push({ id: change.id, proposed: change.proposed });
   }
-  if (pickedChanges.length === 0) return;
+  const resets = pendingResets();
+  if (pickedChanges.length === 0 && resets.length === 0) return;
   const choicesBeforeSave = currentChoices();
   setBusy(true);
   let result;
@@ -905,6 +1031,7 @@ async function saveSelected() {
       cpa_port: cpaPort,
       etag: lastPreview.etag,
       changes: pickedChanges,
+      resets: resets.map((reset) => ({ id: reset.id, fields: reset.fields })),
     });
   } catch (error) {
     setBusy(false);
@@ -912,9 +1039,10 @@ async function saveSelected() {
     return;
   }
   setBusy(false);
-  showNotice("ok", result.is_written
-    ? "Saved " + plural(result.applied_count, "change") + ". CPA reloads its config in the background."
-    : "Nothing needed saving.");
+  if (result.is_written) {
+    for (const reset of resets) resetThisSession.add(reset.modelKey);
+  }
+  showNotice("ok", savedText(result));
   await loadList({ choices: choicesBeforeSave, keepNotice: true });
 }
 

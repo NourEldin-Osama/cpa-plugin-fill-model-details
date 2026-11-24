@@ -199,6 +199,13 @@ ticks them.
   modalities) or `no_data` (with a `no_data_reason`: `not_found`,
   `not_listed`, `same_as_id`, `no_thinking`, `on_off_only`). Only these four
   field values leave the config, never keys.
+- A model with saved details also has a `reset`: an id and the fields that
+  hold a value now. The save request can carry `resets` (the id and the
+  fields the page showed). A reset removes those keys from the model. From
+  `thinking` it removes only `levels`, and it drops `thinking` when nothing
+  else is left; a thinking token budget is never cleared. Keys are removed,
+  never set to an empty value, because the app's model form says explicit
+  empty values override CPA's defaults.
 - The list loads once when the page opens. The page never loads again by
   itself after a refused key; it reloads once after a save and once after a
   refused save (HTTP 409).
@@ -258,8 +265,11 @@ EasyCLIProxyAPI v0.3.117 with CPA core v8.0.80.
 - The plugins setting was `enabled: true`, `dir: plugins`. The DLL went into
   `plugins\windows\amd64`. The app's Plugins screen turned it on with
   `PUT /v8/management/config/plugins/configs/<id>/enabled`, and CPA loaded
-  it at once, with no restart. CPA loads a copy from a `.shadow` folder;
-  replacing the DLL while it is loaded was not tested.
+  it at once, with no restart. CPA loads a copy from a `.shadow` folder.
+- To update the plugin: replace the DLL file, then switch the plugin off and
+  on in the Plugins screen. CPA logged unloaded, loaded and registered, and
+  made a new `.shadow` copy. Without the off and on, CPA kept running the old
+  copy.
 - The app calls the management API about every 15 seconds. Each accepted
   call resets CPA's failed-key count for `127.0.0.1` (read in code).
 

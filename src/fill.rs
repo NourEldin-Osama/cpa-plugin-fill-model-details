@@ -1,9 +1,11 @@
 //! Plans which empty model fields models.dev can fill, and writes the ones the
-//! user picked.
+//! user picked. It can also reset a model: remove its saved details, so that
+//! CPA uses its defaults again.
 //!
 //! A field counts as empty when it is missing or empty, when the context
-//! window is 0, or when the display name equals the model id. Fields that hold
-//! a value are never changed, and every other part of the config is kept.
+//! window is 0, or when the display name equals the model id. Filling never
+//! changes a field that holds a value, and every other part of the config is
+//! kept.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -112,6 +114,16 @@ pub struct FieldDetail {
     pub no_data_reason: Option<NoDataReason>,
 }
 
+/// Removing a model's saved details, so that CPA uses its defaults again.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ModelReset {
+    pub id: String,
+    /// The fields that hold a value now. A reset removes exactly these.
+    pub fields: Vec<&'static str>,
+    #[serde(skip)]
+    location: ModelLocation,
+}
+
 /// The models.dev entry a config model was matched to.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ModelSource {
@@ -140,6 +152,8 @@ pub struct ModelPreview {
     /// state has its change in `changes`.
     pub details: Vec<FieldDetail>,
     pub changes: Vec<FieldChange>,
+    /// Offered when at least one detail holds a value that can be removed.
+    pub reset: Option<ModelReset>,
 }
 
 /// A change the user picked on the page, with the value the page showed.
@@ -147,6 +161,13 @@ pub struct ModelPreview {
 pub struct RequestedChange {
     pub id: String,
     pub proposed: Value,
+}
+
+/// A reset the user picked on the page, with the fields the page showed.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RequestedReset {
+    pub id: String,
+    pub fields: Vec<String>,
 }
 
 /// Lists every model in the `api-keys` node with the state of its four
@@ -168,6 +189,7 @@ pub fn plan(api_keys: &Value, catalog: &Catalog) -> Vec<ModelPreview> {
                 };
                 let found = catalog.find(&base_url, &model_id);
                 let (details, changes) = model_details(&location, model, &model_id, found.as_ref());
+                let reset = model_reset(&location, model, &details);
                 previews.push(ModelPreview {
                     location,
                     entry_name: entry_name.clone(),
@@ -176,6 +198,7 @@ pub fn plan(api_keys: &Value, catalog: &Catalog) -> Vec<ModelPreview> {
                     source: found.map(|found| model_source(&found)),
                     details,
                     changes,
+                    reset,
                 });
             }
         }
@@ -242,6 +265,78 @@ pub fn apply(api_keys: &mut Value, changes: &[FieldChange]) -> usize {
         }
     }
     applied_count
+}
+
+/// The planned resets the user picked. Fails when a picked reset is no
+/// longer planned or would now remove other fields than the page showed.
+pub fn select_resets(
+    previews: &[ModelPreview],
+    requested: &[RequestedReset],
+) -> Result<Vec<ModelReset>, PluginError> {
+    let mut picked: Vec<ModelReset> = Vec::new();
+    for request in requested {
+        let planned = previews
+            .iter()
+            .filter_map(|preview| preview.reset.as_ref())
+            .find(|reset| reset.id == request.id);
+        let Some(reset) = planned else {
+            return Err(PluginError::new(
+                "preview_outdated",
+                "a picked reset is no longer offered",
+            ));
+        };
+        let has_same_fields = reset.fields.len() == request.fields.len()
+            && reset
+                .fields
+                .iter()
+                .zip(&request.fields)
+                .all(|(planned_field, requested_field)| planned_field == requested_field);
+        if !has_same_fields {
+            return Err(PluginError::new(
+                "preview_outdated",
+                "a picked reset would now clear other fields",
+            ));
+        }
+        let is_already_picked = picked.iter().any(|known| known.id == reset.id);
+        if !is_already_picked {
+            picked.push(reset.clone());
+        }
+    }
+    Ok(picked)
+}
+
+/// Removes the listed fields of each picked model and returns how many models
+/// changed. The keys are removed, never set to an empty value: an explicit
+/// empty value would override CPA's defaults.
+pub fn apply_resets(api_keys: &mut Value, resets: &[ModelReset]) -> usize {
+    let mut reset_count = 0;
+    for reset in resets {
+        let Some(model) = api_keys
+            .pointer_mut(&reset.location.json_pointer())
+            .and_then(Value::as_object_mut)
+        else {
+            continue;
+        };
+        let mut has_removed_a_field = false;
+        for field in &reset.fields {
+            if *field == THINKING_LEVELS {
+                let mut is_thinking_left_empty = false;
+                if let Some(thinking) = model.get_mut("thinking").and_then(Value::as_object_mut) {
+                    has_removed_a_field |= thinking.shift_remove("levels").is_some();
+                    is_thinking_left_empty = thinking.is_empty();
+                }
+                if is_thinking_left_empty {
+                    model.shift_remove("thinking");
+                }
+            } else {
+                has_removed_a_field |= model.shift_remove(*field).is_some();
+            }
+        }
+        if has_removed_a_field {
+            reset_count += 1;
+        }
+    }
+    reset_count
 }
 
 /// Models listed on the entry itself and under each of its keys.
@@ -348,6 +443,31 @@ fn model_details(
         }
     }
     (details, changes)
+}
+
+/// The details of a model that hold a value now, as one reset.
+fn model_reset(
+    location: &ModelLocation,
+    model: &Value,
+    details: &[FieldDetail],
+) -> Option<ModelReset> {
+    let fields: Vec<&'static str> = details
+        .iter()
+        .filter(|detail| detail.state == DetailState::Set)
+        // Thinking set by a token budget alone has no levels to clear.
+        .filter(|detail| {
+            detail.field != THINKING_LEVELS || !list_is_empty(model.pointer("/thinking/levels"))
+        })
+        .map(|detail| detail.field)
+        .collect();
+    if fields.is_empty() {
+        return None;
+    }
+    Some(ModelReset {
+        id: location.change_id("reset"),
+        fields,
+        location: location.clone(),
+    })
 }
 
 fn display_name_offer(model: &Value, model_id: &str, found: Option<&CatalogMatch<'_>>) -> Offer {
@@ -722,6 +842,158 @@ mod tests {
             state_of("particle-ai/particle-1:free", INPUT_MODALITIES),
             (DetailState::NotUsed, None)
         );
+    }
+
+    fn reset_request(preview: &ModelPreview) -> RequestedReset {
+        let reset = preview.reset.as_ref().expect("the model can be reset");
+        RequestedReset {
+            id: reset.id.clone(),
+            fields: reset.fields.iter().map(|field| field.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn reset_is_offered_only_for_saved_details() {
+        let catalog = sample_catalog();
+        let mut api_keys = sample_api_keys();
+        let previews = plan(&api_keys, &catalog);
+        // A display name equal to the model id is not a saved detail.
+        assert!(previews.iter().all(|preview| preview.reset.is_none()));
+
+        let changes = all_changes(&previews);
+        apply(&mut api_keys, &changes);
+        let previews = plan(&api_keys, &catalog);
+        let fields_of_reset = |model_id: &str| {
+            let reset = preview_for(&previews, model_id).reset.as_ref();
+            reset.map(|reset| reset.fields.clone())
+        };
+        assert_eq!(
+            fields_of_reset("z-ai/glm-5.3-flash"),
+            Some(vec![
+                DISPLAY_NAME,
+                CONTEXT_LENGTH,
+                INPUT_MODALITIES,
+                THINKING_LEVELS
+            ])
+        );
+        assert_eq!(
+            fields_of_reset("nvidia/nemotron-3.5-super-vl:free"),
+            Some(vec![DISPLAY_NAME, CONTEXT_LENGTH])
+        );
+        assert_eq!(fields_of_reset("particle-ai/particle-1:free"), None);
+        assert_eq!(
+            preview_for(&previews, "z-ai/glm-5.3-flash")
+                .reset
+                .as_ref()
+                .map(|reset| reset.id.as_str()),
+            Some("openai-compatibility/0/-/3/reset")
+        );
+    }
+
+    #[test]
+    fn filling_then_resetting_gives_the_original_back() {
+        let catalog = sample_catalog();
+        let original = sample_api_keys();
+        let mut api_keys = original.clone();
+        let codex_changes: Vec<FieldChange> = all_changes(&plan(&api_keys, &catalog))
+            .into_iter()
+            .filter(|change| change.id.starts_with("codex/"))
+            .collect();
+        assert_eq!(apply(&mut api_keys, &codex_changes), 7);
+        assert_ne!(api_keys, original);
+
+        let previews = plan(&api_keys, &catalog);
+        let requested: Vec<RequestedReset> = previews
+            .iter()
+            .filter(|preview| preview.location.section == "codex" && preview.reset.is_some())
+            .map(reset_request)
+            .collect();
+        assert_eq!(requested.len(), 3);
+        let resets = select_resets(&previews, &requested).expect("the resets were offered");
+        assert_eq!(apply_resets(&mut api_keys, &resets), 3);
+        // The same JSON text: the same keys in the same order, nothing left behind.
+        assert_eq!(
+            serde_json::to_string(&api_keys).expect("JSON text"),
+            serde_json::to_string(&original).expect("JSON text")
+        );
+    }
+
+    #[test]
+    fn reset_keeps_every_other_setting() {
+        let catalog = sample_catalog();
+        let mut api_keys = sample_api_keys();
+        api_keys["openai-compatibility"][0]["models"][3] = json!({
+            "display-name": "My GLM",
+            "name": "z-ai/glm-5.3-flash",
+            "alias": "glm",
+            "thinking": { "levels": ["high"], "zero-allowed": true },
+            "max-context-length": 5000
+        });
+        let previews = plan(&api_keys, &catalog);
+        let glm = preview_for(&previews, "z-ai/glm-5.3-flash");
+        assert_eq!(
+            glm.reset.as_ref().expect("glm has saved details").fields,
+            [DISPLAY_NAME, CONTEXT_LENGTH, THINKING_LEVELS]
+        );
+        let resets = select_resets(&previews, &[reset_request(glm)]).expect("offered");
+        assert_eq!(apply_resets(&mut api_keys, &resets), 1);
+        assert_eq!(
+            serde_json::to_string(&api_keys["openai-compatibility"][0]["models"][3])
+                .expect("JSON text"),
+            r#"{"name":"z-ai/glm-5.3-flash","alias":"glm","thinking":{"zero-allowed":true}}"#
+        );
+        // The other models are untouched.
+        assert_eq!(
+            api_keys["openai-compatibility"][0]["models"][2],
+            sample_api_keys()["openai-compatibility"][0]["models"][2]
+        );
+    }
+
+    #[test]
+    fn a_thinking_budget_is_not_cleared() {
+        let catalog = sample_catalog();
+        let mut api_keys = sample_api_keys();
+        api_keys["openai-compatibility"][0]["models"][3]["thinking"] =
+            json!({ "min": 1024, "max": 8192 });
+        let previews = plan(&api_keys, &catalog);
+        let glm = preview_for(&previews, "z-ai/glm-5.3-flash");
+        assert_eq!(detail_for(glm, THINKING_LEVELS).state, DetailState::Set);
+        assert_eq!(glm.reset, None);
+
+        api_keys["openai-compatibility"][0]["models"][3]["display-name"] = json!("My GLM");
+        let previews = plan(&api_keys, &catalog);
+        let glm = preview_for(&previews, "z-ai/glm-5.3-flash");
+        assert_eq!(
+            glm.reset.as_ref().expect("the name can be cleared").fields,
+            [DISPLAY_NAME]
+        );
+    }
+
+    #[test]
+    fn select_resets_refuses_what_the_user_did_not_see() {
+        let catalog = sample_catalog();
+        let mut api_keys = sample_api_keys();
+        let changes = all_changes(&plan(&api_keys, &catalog));
+        apply(&mut api_keys, &changes);
+        let previews = plan(&api_keys, &catalog);
+        let seen = reset_request(preview_for(&previews, "z-ai/glm-5.3-flash"));
+
+        let picked = select_resets(&previews, &[seen.clone(), seen.clone()]).expect("offered");
+        assert_eq!(picked.len(), 1);
+
+        let fewer_fields = RequestedReset {
+            fields: seen.fields[..2].to_vec(),
+            ..seen.clone()
+        };
+        let error = select_resets(&previews, &[fewer_fields]).expect_err("fields differ");
+        assert_eq!(error.code, "preview_outdated");
+
+        let unknown_model = RequestedReset {
+            id: "codex/9/-/9/reset".to_string(),
+            ..seen
+        };
+        let error = select_resets(&previews, &[unknown_model]).expect_err("id is unknown");
+        assert_eq!(error.code, "preview_outdated");
     }
 
     #[test]

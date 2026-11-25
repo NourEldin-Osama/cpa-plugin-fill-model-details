@@ -1,0 +1,4 @@
+# Check out every text file with LF line ends, on every system and with any
+# Git setting. src/page.html is built into the DLL byte for byte, so CRLF line
+# ends there would give a different DLL.
+* text=auto eol=lf
